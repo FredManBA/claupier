@@ -1,0 +1,27 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.preview {
+  /* Solo en el navegador (modo demo), para ver la mesa sobre un fondo. */
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #2b2d33;
+}
+
+#mesa {
+  display: block;
+  image-rendering: pixelated;
+  cursor: grab;
+}

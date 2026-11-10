@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claupier</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script>
+      if (!("__TAURI_INTERNALS__" in window)) document.documentElement.classList.add("preview");
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <canvas id="mesa" aria-label="Uso de Claude: banca del plan y fichas gastadas hoy"></canvas>
+    <script>
+      if (document.documentElement.classList.contains("preview")) document.body.classList.add("preview");
+    </script>
+  </body>
+</html>
