@@ -9,6 +9,8 @@ use tauri_plugin_global_shortcut::{Modifiers, Shortcut};
 
 pub const DESIGNS: &[&str] = &["mesa", "pildora", "tragamonedas", "pachinko"];
 const ANCHORS: &[&str] = &["free", "top-left", "top-right", "bottom-left", "bottom-right"];
+/// Ctrl+Shift+Alt+Super y una tecla como «MediaPlayPause» caben de sobra.
+const MAX_HOTKEY_LEN: usize = 48;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -142,7 +144,7 @@ impl Settings {
         if parse_hotkey(&self.hotkey_toggle).is_err() {
             self.hotkey_toggle = d.hotkey_toggle;
         }
-        if parse_hotkey(&self.hotkey_ghost).is_err() || self.hotkey_ghost == self.hotkey_toggle {
+        if parse_hotkey(&self.hotkey_ghost).is_err() || same_hotkey(&self.hotkey_ghost, &self.hotkey_toggle) {
             self.hotkey_ghost = d.hotkey_ghost;
         }
     }
@@ -197,6 +199,9 @@ fn merge(base: &mut serde_json::Value, patch: &serde_json::Value) {
 /// Lee un atajo como "Ctrl+Alt+F". Exige al menos un modificador, para no
 /// secuestrar una tecla suelta que el juego necesite.
 pub fn parse_hotkey(text: &str) -> Result<Shortcut, String> {
+    if text.len() > MAX_HOTKEY_LEN || text.split('+').count() > 5 {
+        return Err("Ese atajo es demasiado largo. Usa algo como Ctrl+Alt+F.".into());
+    }
     let shortcut =
         Shortcut::from_str(text).map_err(|_| format!("No entiendo el atajo «{text}». Usa algo como Ctrl+Alt+F."))?;
     if shortcut.mods.is_empty() || shortcut.mods == Modifiers::SHIFT {
@@ -256,5 +261,13 @@ mod tests {
         let s = Settings::default();
         assert!(s.merged(&json!({"hotkeyGhost": "Ctrl+Alt+F"})).is_err(), "atajos repetidos");
         assert!(s.merged(&json!({"hotkeyToggle": "banana"})).is_err());
+        assert!(parse_hotkey("Ctrl+Ctrl+Ctrl+Ctrl+Ctrl+Ctrl+F").is_err(), "demasiado largo");
+    }
+
+    #[test]
+    fn sanitize_detecta_atajos_iguales_escritos_distinto() {
+        let mut s = Settings { hotkey_ghost: "Alt+Ctrl+F".into(), ..Default::default() };
+        s.sanitize();
+        assert_eq!(s.hotkey_ghost, "Ctrl+Alt+G");
     }
 }

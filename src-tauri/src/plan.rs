@@ -8,6 +8,7 @@
 //! El endpoint no está documentado oficialmente y limita las consultas
 //! seguidas (429), así que se consulta cada pocos minutos con espera creciente.
 
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,6 +18,10 @@ use serde_json::Value;
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const RETRY_EVERY: Duration = Duration::from_secs(60);
 const MAX_BACKOFF: Duration = Duration::from_secs(15 * 60);
+/// Tiempo mínimo entre una consulta y la siguiente pedida a mano.
+const MIN_MANUAL_GAP: Duration = Duration::from_secs(30);
+/// La respuesta ocupa unos cientos de bytes; más que esto es un error.
+const MAX_BODY: u64 = 64 * 1024;
 
 #[derive(Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,25 +49,32 @@ impl Default for PlanInfo {
 }
 
 pub struct PlanFetcher {
-    credentials: PathBuf,
-    client: reqwest::blocking::Client,
+    /// `None` si no se encontró la carpeta de Claude.
+    credentials: Option<PathBuf>,
+    /// `None` si no se pudo crear el cliente HTTP (por ejemplo, sin TLS).
+    client: Option<reqwest::blocking::Client>,
     next: Instant,
+    last_fetch: Option<Instant>,
     every: Duration,
     backoff: Duration,
     pub info: PlanInfo,
 }
 
 impl PlanFetcher {
-    pub fn new(claude_dir: PathBuf) -> Self {
+    pub fn new(claude_dir: Option<PathBuf>) -> Self {
+        // Sin redirecciones y solo HTTPS: el token nunca sale de api.anthropic.com.
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(15))
             .user_agent("claupier/0.1")
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(true)
             .build()
-            .expect("cliente HTTP");
+            .ok();
         Self {
-            credentials: claude_dir.join(".credentials.json"),
+            credentials: claude_dir.map(|d| d.join(".credentials.json")),
             client,
             next: Instant::now(),
+            last_fetch: None,
             every: Duration::from_secs(180),
             backoff: Duration::from_secs(180),
             info: PlanInfo::default(),
@@ -77,20 +89,25 @@ impl PlanFetcher {
         }
     }
 
-    /// Fuerza una consulta en el próximo `tick`.
+    /// Adelanta la próxima consulta (al pedir «Actualizar ahora»). Respeta la
+    /// espera tras un 429 y deja al menos `MIN_MANUAL_GAP` desde la anterior.
     pub fn poke(&mut self) {
-        self.next = Instant::now();
+        if self.info.status == "rate_limited" {
+            return;
+        }
+        let earliest = self.last_fetch.map_or_else(Instant::now, |t| t + MIN_MANUAL_GAP);
+        self.next = self.next.min(earliest.max(Instant::now()));
     }
 
-    /// Devuelve `true` si cambió la información.
-    pub fn tick(&mut self) -> bool {
+    /// Consulta el plan si ya toca.
+    pub fn tick(&mut self) {
         if Instant::now() < self.next {
-            return false;
+            return;
         }
-        let before = serde_json::to_string(&self.info).unwrap_or_default();
         let wait = self.fetch();
-        self.next = Instant::now() + wait;
-        before != serde_json::to_string(&self.info).unwrap_or_default()
+        let now = Instant::now();
+        self.last_fetch = Some(now);
+        self.next = now + wait;
     }
 
     fn set_status(&mut self, status: &str) {
@@ -110,8 +127,11 @@ impl PlanFetcher {
             return RETRY_EVERY;
         }
 
-        let res = self
-            .client
+        let Some(client) = &self.client else {
+            self.set_status("error");
+            return RETRY_EVERY * 5;
+        };
+        let res = client
             .get(USAGE_URL)
             .bearer_auth(&token)
             .header("anthropic-beta", "oauth-2025-04-20")
@@ -134,7 +154,15 @@ impl PlanFetcher {
             }
             429 => {
                 self.set_status("rate_limited");
-                self.backoff = (self.backoff * 2).min(MAX_BACKOFF);
+                // Nunca esperar menos que el sondeo normal, y respetar Retry-After.
+                let retry_after = res
+                    .headers()
+                    .get(reqwest::header::RETRY_AFTER)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.trim().parse::<u64>().ok())
+                    .map(|s| Duration::from_secs(s.min(3600)))
+                    .unwrap_or_default();
+                self.backoff = (self.backoff * 2).min(MAX_BACKOFF.max(self.every)).max(retry_after);
                 return self.backoff;
             }
             _ => {
@@ -143,7 +171,13 @@ impl PlanFetcher {
             }
         }
 
-        let Ok(body) = res.json::<Value>() else {
+        let mut bytes = Vec::new();
+        let body = res
+            .take(MAX_BODY)
+            .read_to_end(&mut bytes)
+            .ok()
+            .and_then(|_| serde_json::from_slice::<Value>(&bytes).ok());
+        let Some(body) = body else {
             self.set_status("error");
             return RETRY_EVERY * 2;
         };
@@ -157,7 +191,7 @@ impl PlanFetcher {
     }
 
     fn read_credentials(&self) -> Option<(String, Option<i64>, Option<String>)> {
-        let text = std::fs::read_to_string(&self.credentials).ok()?;
+        let text = std::fs::read_to_string(self.credentials.as_ref()?).ok()?;
         let v: Value = serde_json::from_str(&text).ok()?;
         let oauth = &v["claudeAiOauth"];
         let token = oauth["accessToken"].as_str()?.to_string();

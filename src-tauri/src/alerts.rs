@@ -2,6 +2,8 @@
 //! por ventana (o por periodo) y solo se rearma cuando la situación mejora con
 //! margen, para no repetirse si el valor baila alrededor del umbral.
 
+use chrono::{DateTime, Duration, DurationRound, Utc};
+
 use crate::plan::{LimitWindow, PlanInfo};
 use crate::settings::Alerts as AlertSettings;
 
@@ -21,10 +23,13 @@ pub struct Alert {
     pub body: String,
 }
 
-/// Identifica una ventana del plan por la hora de su reinicio. Se redondea a
-/// la hora para que pequeñas variaciones del servidor no cuenten como otra.
-fn window_key(w: &LimitWindow) -> String {
-    w.resets_at.as_deref().map(|s| s.chars().take(13).collect()).unwrap_or_else(|| "?".into())
+/// Identifica una ventana del plan por la hora de su reinicio, redondeada a la
+/// hora más cercana: así 17:59:59 y 18:00:01 cuentan como la misma ventana.
+/// `None` si el servidor no dio un reinicio válido.
+pub fn window_key(w: &LimitWindow) -> Option<String> {
+    let reset = w.resets_at.as_deref()?.parse::<DateTime<Utc>>().ok()?;
+    let rounded = (reset + Duration::minutes(30)).duration_trunc(Duration::hours(1)).ok()?;
+    Some(rounded.format("%Y-%m-%dT%H").to_string())
 }
 
 fn check_bank(
@@ -37,12 +42,15 @@ fn check_bank(
 ) {
     let Some(w) = win else { return };
     let left = (100.0 - w.used).max(0.0);
+    // Sin reinicio conocido se conserva la ventana anterior: un hueco en los
+    // datos no debe rearmar el aviso.
     let key = window_key(w);
-    if left > below as f64 + REARM_MARGIN || fired.as_deref().is_some_and(|k| k != key) {
+    let new_window = key.as_ref().is_some_and(|k| fired.as_ref().is_some_and(|f| f != k));
+    if left > below as f64 + REARM_MARGIN || new_window {
         *fired = None;
     }
     if enabled && left <= below as f64 && fired.is_none() {
-        *fired = Some(key);
+        *fired = Some(key.unwrap_or_else(|| "?".into()));
         out.push(Alert {
             title: format!("Tu banca {name} está al {left:.0} %"),
             body: format!("Bajó del {below} % que elegiste en los ajustes de Claupier."),
@@ -52,7 +60,8 @@ fn check_bank(
 
 impl AlertState {
     /// `spend` es el gasto del periodo elegido y `period_key` lo identifica
-    /// (la fecha de hoy o el reinicio de la ventana).
+    /// (la fecha de hoy o el reinicio de la ventana). Debe ser estable durante
+    /// todo el periodo: si cambia, el aviso de gasto se rearma.
     pub fn check(
         &mut self,
         cfg: &AlertSettings,
@@ -115,6 +124,18 @@ mod tests {
         // Ventana nueva: se rearma.
         let r2 = "2026-11-10T23:00:00Z";
         assert_eq!(st.check(&cfg, &plan(90.0, r2), 0.0, "d", "hoy").len(), 1);
+    }
+
+    #[test]
+    fn el_reinicio_que_baila_alrededor_de_la_hora_es_la_misma_ventana() {
+        let cfg = AlertSettings::default();
+        let mut st = AlertState::default();
+        assert_eq!(st.check(&cfg, &plan(85.0, "2026-11-10T17:59:59.900Z"), 0.0, "d", "hoy").len(), 1);
+        assert!(st.check(&cfg, &plan(86.0, "2026-11-10T18:00:00.100Z"), 0.0, "d", "hoy").is_empty());
+        // Un reinicio que falta tampoco cuenta como ventana nueva.
+        let mut sin_reinicio = plan(87.0, "x");
+        sin_reinicio.five_hour.as_mut().unwrap().resets_at = None;
+        assert!(st.check(&cfg, &sin_reinicio, 0.0, "d", "hoy").is_empty());
     }
 
     #[test]

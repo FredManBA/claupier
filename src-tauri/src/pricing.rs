@@ -34,10 +34,14 @@ const TABLE: &[(&str, Rates)] = &[
     ("sonnet-5-5", r(2.0, 10.0, 0.10)),
     ("sonnet-5", r(2.0, 10.0, 0.20)),
     ("sonnet-4", r(3.0, 15.0, 0.30)),
-    ("sonnet-3", r(3.0, 15.0, 0.30)),
     ("haiku-5-5", r(0.10, 0.50, 0.01)),
     ("haiku-4-5", r(1.0, 5.0, 0.10)),
-    ("haiku-3-5", r(0.80, 4.0, 0.08)),
+    // Familia 3: el número va antes del nombre (claude-3-5-haiku-20241022).
+    ("3-7-sonnet", r(3.0, 15.0, 0.30)),
+    ("3-5-sonnet", r(3.0, 15.0, 0.30)),
+    ("3-5-haiku", r(0.80, 4.0, 0.08)),
+    ("3-haiku", r(0.25, 1.25, 0.03)),
+    ("3-opus", r(15.0, 75.0, 1.50)),
 ];
 
 /// Si aparece un modelo desconocido se cobra como Opus 5.5 (el modelo por defecto).
@@ -60,7 +64,7 @@ pub fn cost_usd(model: &str, u: &Usage) -> f64 {
         .unwrap_or(&FALLBACK);
 
     // Haiku 5.5 sube de precio con prompts de más de 100K tokens.
-    let prompt = u.input + u.cache_write_5m + u.cache_write_1h + u.cache_read;
+    let prompt = u.input.saturating_add(u.cache_write_5m).saturating_add(u.cache_write_1h).saturating_add(u.cache_read);
     let big_haiku = model.contains("haiku-5-5") && prompt > 100_000;
     let (input, output, cache_read) = if big_haiku {
         (0.50, 2.50, 0.05)
@@ -111,6 +115,14 @@ mod tests {
         // (4*1.25 + 4*2 + 0.20) * 2
         let c = cost_usd("claude-opus-5-5", &u);
         assert!((c - 26.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn modelos_de_la_familia_3() {
+        let c = cost_usd("claude-3-5-haiku-20241022", &usage(1_000_000, 1_000_000));
+        assert!((c - 4.80).abs() < 1e-9);
+        let c = cost_usd("claude-3-7-sonnet-20250219", &usage(1_000_000, 0));
+        assert!((c - 3.0).abs() < 1e-9);
     }
 
     #[test]

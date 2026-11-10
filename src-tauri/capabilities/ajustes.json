@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ajustes",
+  "description": "La ventana de ajustes: lee y cambia los ajustes, prueba avisos y se mueve, maximiza y oculta",
+  "windows": ["ajustes"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-hide",
+    "allow-get-settings",
+    "allow-update-settings",
+    "allow-set-hotkeys-paused",
+    "allow-test-alert"
+  ]
+}

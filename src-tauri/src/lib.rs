@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, DurationRound, Utc};
 use serde::Serialize;
 use settings::Settings;
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder};
@@ -24,6 +24,9 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 const LOOP_EVERY: Duration = Duration::from_secs(5);
 const MAIN: &str = "main";
 const SETTINGS: &str = "ajustes";
+/// Lado máximo de la mesa en píxeles físicos (el diseño más alto, a 4× y con la
+/// pantalla al 300 %, mide menos de 2000).
+const MAX_SIDE: u32 = 4096;
 
 #[derive(Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,8 +75,13 @@ fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result<Settings,
     let state = app.state::<AppState>();
     let current = state.settings.lock().unwrap().clone();
     let next = current.merged(&patch)?;
-    apply_settings(&app, Some(&current), &next)?;
-    next.save(&state.settings_path.lock().unwrap())?;
+    let path = state.settings_path.lock().unwrap().clone();
+    // Si algo falla (un atajo ocupado, el disco), se deshace lo ya aplicado
+    // para que lo activo, lo guardado y lo que muestra la ventana coincidan.
+    if let Err(e) = apply_settings(&app, Some(&current), &next).and_then(|_| next.save(&path)) {
+        let _ = apply_settings(&app, Some(&next), &current);
+        return Err(e);
+    }
     *state.settings.lock().unwrap() = next.clone();
     let _ = app.emit("settings", next.clone());
     Ok(next)
@@ -93,9 +101,10 @@ fn open_settings(app: AppHandle) {
 #[tauri::command]
 fn fit_window(app: AppHandle, width: u32, height: u32) {
     if let Some(w) = app.get_webview_window(MAIN) {
-        let _ = w.set_size(PhysicalSize::new(width.max(16), height.max(16)));
+        let size = PhysicalSize::new(width.clamp(16, MAX_SIDE), height.clamp(16, MAX_SIDE));
+        let _ = w.set_size(size);
         let anchor = app.state::<AppState>().settings.lock().unwrap().anchor.clone();
-        place_main(&app, &anchor, PhysicalSize::new(width, height));
+        place_main(&app, &anchor, size);
     }
 }
 
@@ -155,11 +164,12 @@ fn place_main(app: &AppHandle, anchor: &str, size: PhysicalSize<u32>) {
     let Some(monitor) = monitor else { return };
     let area = monitor.work_area();
     let margin = (16.0 * monitor.scale_factor()).round() as i32;
-    let (w_px, h_px) = (size.width as i32, size.height as i32);
-    let left = area.position.x + margin;
-    let right = area.position.x + area.size.width as i32 - w_px - margin;
-    let top = area.position.y + margin;
-    let bottom = area.position.y + area.size.height as i32 - h_px - margin;
+    let px = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
+    let (x0, y0) = (area.position.x, area.position.y);
+    let left = x0.saturating_add(margin);
+    let right = x0.saturating_add(px(area.size.width)).saturating_sub(px(size.width)).saturating_sub(margin);
+    let top = y0.saturating_add(margin);
+    let bottom = y0.saturating_add(px(area.size.height)).saturating_sub(px(size.height)).saturating_sub(margin);
     let (x, y) = match anchor {
         "top-left" => (left, top),
         "top-right" => (right, top),
@@ -173,55 +183,95 @@ fn hotkey_label(text: &str, key: &str) -> String {
     format!("{text}   {key}")
 }
 
-/// Aplica los efectos de los ajustes. Con `old = None` aplica todo (arranque).
-fn apply_settings(app: &AppHandle, old: Option<&Settings>, new: &Settings) -> Result<(), String> {
+/// Registra los atajos nuevos.
+///
+/// - Al cambiarlos desde los ajustes (`strict`), es todo o nada: si uno falla
+///   se vuelve a los anteriores para no quedarse sin atajos.
+/// - Al arrancar, cada atajo va por separado: si otra app ocupa uno, el otro
+///   sigue funcionando.
+fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), String> {
     let state = app.state::<AppState>();
-
-    let keys_changed = old.is_none_or(|o| o.hotkey_toggle != new.hotkey_toggle || o.hotkey_ghost != new.hotkey_ghost);
-    if keys_changed {
-        let toggle = settings::parse_hotkey(&new.hotkey_toggle)?;
-        let ghost = settings::parse_hotkey(&new.hotkey_ghost)?;
-        let gs = app.global_shortcut();
-        let _ = gs.unregister_all();
-        if let Err(e) = gs.register(toggle).and_then(|_| gs.register(ghost)) {
-            // Volver a los anteriores para no quedarse sin atajos.
-            let _ = gs.unregister_all();
-            if let Some((t, g)) = *state.keys.lock().unwrap() {
-                let _ = gs.register(t);
-                let _ = gs.register(g);
+    let toggle = settings::parse_hotkey(&new.hotkey_toggle)?;
+    let ghost = settings::parse_hotkey(&new.hotkey_ghost)?;
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    let mut taken = Vec::new();
+    for (key, text) in [(toggle, &new.hotkey_toggle), (ghost, &new.hotkey_ghost)] {
+        if gs.register(key).is_err() {
+            taken.push(text.as_str());
+            if strict {
+                break;
             }
-            return Err(format!("Ese atajo ya lo usa otra aplicación ({e})."));
-        }
-        *state.keys.lock().unwrap() = Some((toggle, ghost));
-        if let Some(item) = state.toggle_item.lock().unwrap().as_ref() {
-            let _ = item.set_text(hotkey_label("Mostrar u ocultar", &new.hotkey_toggle));
-        }
-        if let Some(item) = state.ghost_item.lock().unwrap().as_ref() {
-            let _ = item.set_text(hotkey_label("Modo fantasma", &new.hotkey_ghost));
         }
     }
+    if strict && !taken.is_empty() {
+        let _ = gs.unregister_all();
+        if let Some((t, g)) = *state.keys.lock().unwrap() {
+            let _ = gs.register(t);
+            let _ = gs.register(g);
+        }
+        return Err(format!("El atajo {} ya lo usa otra aplicación.", taken.join(" y ")));
+    }
+    *state.keys.lock().unwrap() = Some((toggle, ghost));
+    if let Some(item) = state.toggle_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(hotkey_label("Mostrar u ocultar", &new.hotkey_toggle));
+    }
+    if let Some(item) = state.ghost_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(hotkey_label("Modo fantasma", &new.hotkey_ghost));
+    }
+    if taken.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("El atajo {} ya lo usa otra aplicación; cámbialo en los ajustes.", taken.join(" y ")))
+    }
+}
 
+fn apply_autostart(app: &AppHandle, on: bool) -> Result<(), String> {
+    let auto = app.autolaunch();
+    let enabled = auto.is_enabled().unwrap_or(false);
+    if on && !enabled {
+        auto.enable().map_err(|e| format!("No pude activar el arranque con Windows: {e}"))?;
+    } else if !on && enabled {
+        auto.disable().map_err(|e| format!("No pude quitar el arranque con Windows: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Aplica los efectos de los ajustes.
+///
+/// - Con `old = None` (arranque) aplica todo y no se detiene ante un error:
+///   los junta y los devuelve al final.
+/// - Con `old`, solo lo que cambió, y se detiene en el primer error.
+fn apply_settings(app: &AppHandle, old: Option<&Settings>, new: &Settings) -> Result<(), String> {
+    let startup = old.is_none();
+    let mut errors = Vec::new();
+    let mut step = |result: Result<(), String>| -> Result<(), String> {
+        match result {
+            Err(e) if startup => {
+                errors.push(e);
+                Ok(())
+            }
+            other => other,
+        }
+    };
+
+    if old.is_none_or(|o| o.hotkey_toggle != new.hotkey_toggle || o.hotkey_ghost != new.hotkey_ghost) {
+        step(apply_hotkeys(app, new, !startup))?;
+    }
     if old.is_none_or(|o| o.autostart != new.autostart) {
-        let auto = app.autolaunch();
-        let enabled = auto.is_enabled().unwrap_or(false);
-        if new.autostart && !enabled {
-            auto.enable().map_err(|e| format!("No pude activar el arranque con Windows: {e}"))?;
-        } else if !new.autostart && enabled {
-            auto.disable().map_err(|e| format!("No pude quitar el arranque con Windows: {e}"))?;
-        }
+        step(apply_autostart(app, new.autostart))?;
     }
-
     if let Some(w) = app.get_webview_window(MAIN) {
         if old.is_none_or(|o| o.always_on_top != new.always_on_top) {
             let _ = w.set_always_on_top(new.always_on_top);
         }
-        if old.is_none_or(|o| o.anchor != new.anchor) {
-            if let Ok(size) = w.outer_size() {
-                place_main(app, &new.anchor, size);
-            }
+        if old.is_none_or(|o| o.anchor != new.anchor)
+            && let Ok(size) = w.outer_size()
+        {
+            place_main(app, &new.anchor, size);
         }
     }
-    Ok(())
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
 }
 
 fn notify(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
@@ -233,21 +283,49 @@ fn quit(app: &AppHandle) {
     app.exit(0);
 }
 
-fn claude_dir() -> PathBuf {
+/// La carpeta de Claude Code: `CLAUDE_CONFIG_DIR` si es una ruta absoluta, o
+/// `~/.claude`. `None` si no se encuentra la carpeta de usuario: nunca se usa
+/// una ruta relativa, que dependería de desde dónde se abrió la app.
+fn claude_dir(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("CLAUDE_CONFIG_DIR") {
-        return PathBuf::from(dir);
+        let dir = PathBuf::from(dir);
+        if dir.is_absolute() {
+            return Some(dir);
+        }
     }
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
-    PathBuf::from(home).join(".claude")
+    app.path().home_dir().ok().filter(|h| h.is_absolute()).map(|h| h.join(".claude"))
 }
 
-/// Inicio de la ventana: su reinicio menos su duración. Si aún no se conoce
-/// el plan, se usa una ventana móvil hasta ahora.
+/// Inicio de la ventana del plan.
+///
+/// - Con su reinicio: el reinicio menos la duración; si el reinicio ya pasó y
+///   aún no hay datos nuevos, la ventana nueva empezó en ese reinicio.
+/// - Sin plan: una ventana móvil hasta ahora, redondeada al minuto para que no
+///   cambie en cada vuelta.
 fn window_start(win: Option<&plan::LimitWindow>, length: chrono::Duration) -> DateTime<Utc> {
-    win.and_then(|w| w.resets_at.as_deref())
-        .and_then(|s| s.parse::<DateTime<Utc>>().ok())
-        .map(|reset| reset - length)
-        .unwrap_or_else(|| Utc::now() - length)
+    let now = Utc::now();
+    let reset = win.and_then(|w| w.resets_at.as_deref()).and_then(|s| s.parse::<DateTime<Utc>>().ok());
+    match reset {
+        Some(reset) if reset <= now => reset,
+        Some(reset) => reset.checked_sub_signed(length).unwrap_or(now),
+        None => {
+            let start = now.checked_sub_signed(length).unwrap_or(now);
+            start.duration_trunc(chrono::Duration::minutes(1)).unwrap_or(start)
+        }
+    }
+}
+
+/// Clave estable del periodo para el aviso de gasto: cambia solo cuando
+/// empieza un periodo nuevo.
+fn period_key(period: &str, plan: &plan::PlanInfo) -> String {
+    let win = match period {
+        "window5h" => plan.five_hour.as_ref(),
+        "week" => plan.seven_day.as_ref(),
+        _ => return format!("hoy:{}", chrono::Local::now().date_naive()),
+    };
+    // Sin reinicio conocido se mantiene una sola clave, para no repetir el aviso.
+    let reset = win.and_then(alerts::window_key).unwrap_or_else(|| "sin-plan".into());
+    format!("{period}:{reset}")
 }
 
 /// Hilo que lee los registros, consulta el plan, decide los avisos y avisa a
@@ -257,8 +335,8 @@ fn start_worker(app: AppHandle) {
     *app.state::<AppState>().refresh.lock().unwrap() = Some(tx);
 
     std::thread::spawn(move || {
-        let dir = claude_dir();
-        let mut scanner = logs::LogScanner::new(dir.join("projects"));
+        let dir = claude_dir(&app);
+        let mut scanner = logs::LogScanner::new(dir.as_ref().map(|d| d.join("projects")));
         let mut fetcher = plan::PlanFetcher::new(dir);
         let mut alert_state = alerts::AlertState::default();
         loop {
@@ -272,11 +350,12 @@ fn start_worker(app: AppHandle) {
             let window5h = scanner.totals_since(window_start(plan.five_hour.as_ref(), chrono::Duration::hours(5)));
             let week = scanner.totals_since(window_start(plan.seven_day.as_ref(), chrono::Duration::days(7)));
 
-            let (spend, key, name) = match cfg.period.as_str() {
-                "window5h" => (window5h.cost_usd, window5h.since.clone(), "en esta ventana de 5 h"),
-                "week" => (week.cost_usd, week.since.clone(), "esta semana"),
-                _ => (today.cost_usd, today.since.clone(), "hoy"),
+            let (spend, name) = match cfg.period.as_str() {
+                "window5h" => (window5h.cost_usd, "en esta ventana de 5 h"),
+                "week" => (week.cost_usd, "esta semana"),
+                _ => (today.cost_usd, "hoy"),
             };
+            let key = period_key(&cfg.period, &plan);
             for a in alert_state.check(&cfg.alerts, &plan, spend, &key, name) {
                 let _ = notify(&app, &a.title, &a.body);
             }
@@ -301,7 +380,11 @@ fn start_worker(app: AppHandle) {
             }
 
             match rx.recv_timeout(LOOP_EVERY) {
-                Ok(()) => fetcher.poke(),
+                Ok(()) => {
+                    // Varios clics seguidos cuentan como una sola petición.
+                    while rx.try_recv().is_ok() {}
+                    fetcher.poke();
+                }
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -348,12 +431,21 @@ pub fn run() {
             ghost_item: Mutex::new(None),
         })
         .on_window_event(|window, event| {
-            // Cerrar los ajustes solo los esconde, para abrirlos rápido otra vez.
-            if window.label() == SETTINGS {
-                if let WindowEvent::CloseRequested { api, .. } = event {
+            if window.label() != SETTINGS {
+                return;
+            }
+            // Si se estaba capturando un atajo y los ajustes pierden el foco o se
+            // cierran, los atajos vuelven a funcionar.
+            let unpause = || *window.state::<AppState>().hotkeys_paused.lock().unwrap() = false;
+            match event {
+                // Cerrar los ajustes solo los esconde, para abrirlos rápido otra vez.
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     let _ = window.hide();
+                    unpause();
                 }
+                WindowEvent::Focused(false) => unpause(),
+                _ => {}
             }
         })
         .setup(|app| {
@@ -407,12 +499,12 @@ pub fn run() {
 
             let handle = app.handle().clone();
             if let Err(e) = apply_settings(&handle, None, &cfg) {
-                eprintln!("Claupier: {e}");
+                let _ = notify(&handle, "Claupier arrancó con un problema", &e);
             }
-            if !cfg.start_hidden {
-                if let Some(w) = app.get_webview_window(MAIN) {
-                    let _ = w.show();
-                }
+            if !cfg.start_hidden
+                && let Some(w) = app.get_webview_window(MAIN)
+            {
+                let _ = w.show();
             }
             if cfg.start_ghost {
                 set_ghost(&handle, true);
