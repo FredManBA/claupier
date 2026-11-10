@@ -16,7 +16,8 @@ import {
 } from "../core/format";
 import { CHIP_DIMS, type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
-import { BRASS, drawFelt, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect, rounded, shadow } from "../core/paint";
+import { CountUp, easeInOut, lerp } from "../core/anim";
+import { BRASS, LOGO_GRADIENT, drawFelt, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect, rounded, shadow } from "../core/paint";
 import { DENOMS, Stack, chipsFor } from "../core/stack";
 import type { LimitWindow, Motion, PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
@@ -43,7 +44,6 @@ const C = {
   shadow: "#0a1a12",
 };
 
-const LOGO = ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"];
 
 // Geometría
 const SIGN = { x: 7, y: 7, w: 98, h: 24 };
@@ -65,9 +65,6 @@ interface Glider {
   landed: boolean;
 }
 
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
-const easeOut = (t: number) => 1 - (1 - t) ** 3;
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export class Mesa implements Design {
   readonly id = "mesa" as const;
@@ -81,10 +78,7 @@ export class Mesa implements Design {
   /** Fichas de tu banca que se ven ahora mismo. */
   private bankChips = 0;
   private gliders: Glider[] = [];
-  private shownCost = 0;
-  private costFrom = 0;
-  private costTo = 0;
-  private costStart = 0;
+  private cost = new CountUp();
   private nextFlip = 0;
 
   constructor() {
@@ -114,10 +108,7 @@ export class Mesa implements Design {
 
     const cost = periodTotals(snap, ctx.settings.period).costUsd;
     chipsFor(cost).forEach((n, i) => this.pot[i].setTarget(n, now, motion));
-    this.costFrom = this.shownCost;
-    this.costTo = cost;
-    this.costStart = now;
-    if (motion !== "full") this.shownCost = cost;
+    this.cost.set(cost, now, motion === "full");
     this.snap = snap;
   }
 
@@ -153,11 +144,7 @@ export class Mesa implements Design {
     if (this.gliders.length > 0) busy = true;
 
     // El monto cuenta hasta el valor nuevo.
-    if (this.shownCost !== this.costTo) {
-      const t = Math.min(1, (now - this.costStart) / 600);
-      this.shownCost = t >= 1 ? this.costTo : lerp(this.costFrom, this.costTo, easeOut(t));
-      busy = true;
-    }
+    if (this.cost.update(now)) busy = true;
 
     // De vez en cuando gira la ficha de arriba de alguna pila.
     if (this.ctx?.motion === "full" && now >= this.nextFlip) {
@@ -197,7 +184,7 @@ export class Mesa implements Design {
     for (const s of this.pot) {
       const extra = s.count - s.maxVisible;
       if (extra > 0) {
-        const label = `+${extra}`;
+        const label = extra > 999 ? "+999" : `+${extra}`;
         drawText(g, label, s.x + 9 - Math.floor(textWidth(label) / 2), s.chipY(s.maxVisible - 1) - 7, C.gold, { shadow: C.shadow });
       }
       s.draw(g, now);
@@ -243,7 +230,7 @@ export class Mesa implements Design {
         rect(b, x + 3, y + 3, w - 6, 2, C.signLight);
         rect(b, x + 3, y + h - 4, w - 6, 1, C.signDark);
         const logo = "CLAUPIER";
-        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big")) / 2), y + 4, LOGO, { font: "big", shadow: C.signDark });
+        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big")) / 2), y + 4, LOGO_GRADIENT, { font: "big", shadow: C.signDark });
       }),
       0,
       0,
@@ -313,7 +300,7 @@ export class Mesa implements Design {
     g.drawImage(layer("mesa:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
     const settings = this.ctx?.settings;
     if (!settings) return;
-    engrave(g, formatMoney(this.shownCost, settings), x + 5, y + 4, BRASS.ink, { font: "big" });
+    engrave(g, formatMoney(this.cost.shown, settings), x + 5, y + 4, BRASS.ink, { font: "big" });
     const totals = snap ? periodTotals(snap, settings.period) : null;
     const tokens = `${formatTokens(totals?.totalTokens ?? 0)} TOK`;
     engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 6, "#4a3210");

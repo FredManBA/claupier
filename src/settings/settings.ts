@@ -7,7 +7,7 @@ import { chipSprites } from "../core/chips";
 import { hash } from "../core/paint";
 import { SoundEngine } from "../core/sound";
 import type { DeepPartial, Settings, Snapshot } from "../core/types";
-import { DesignView } from "../core/view";
+import { DesignView, effectiveMotion } from "../core/view";
 import { DESIGN_LIST } from "../designs/index";
 
 type Path = string; // "sound.volume"
@@ -349,7 +349,13 @@ function renderField(f: Field): HTMLElement {
       const wrap = el("span", { className: "number" }, input, f.unit);
       input.addEventListener("change", () => {
         const v = Number(input.value);
-        if (Number.isFinite(v)) void save(f.path, Math.min(f.max, Math.max(f.min, v)));
+        // Un campo vacío o inválido vuelve al valor guardado en vez de guardar un 0.
+        if (input.value.trim() === "" || !Number.isFinite(v)) {
+          input.value = String(get(f.path));
+          return;
+        }
+        const stepped = Number.isInteger(f.step) ? Math.round(v) : v;
+        void save(f.path, Math.min(f.max, Math.max(f.min, stepped)));
       });
       const row = fieldRow(f.label, wrap, f.help, id, input);
       if (f.under) row.classList.add("sub");
@@ -366,7 +372,9 @@ function renderField(f: Field): HTMLElement {
       const btn = el("button", { className: "hotkey", type: "button" });
       let capturing = false;
       const stop = () => {
+        if (!capturing) return;
         capturing = false;
+        if (stopCapture === stop) stopCapture = null;
         btn.classList.remove("capturing");
         window.removeEventListener("keydown", onKey, true);
         void bridge.setHotkeysPaused(false);
@@ -386,6 +394,8 @@ function renderField(f: Field): HTMLElement {
       };
       btn.addEventListener("click", () => {
         if (capturing) return stop();
+        stopCapture?.(); // solo una captura a la vez
+        stopCapture = stop;
         capturing = true;
         btn.classList.add("capturing");
         btn.textContent = "Pulsa la combinación…";
@@ -437,6 +447,9 @@ function renderField(f: Field): HTMLElement {
   }
 }
 
+/** Cancela la captura de atajo en curso, si hay una. */
+let stopCapture: (() => void) | null = null;
+
 /** Nombre de la tecla en el formato que entiende el backend ("F", "1", "F5"…). */
 function keyName(e: KeyboardEvent): string | null {
   if (["Control", "Alt", "Shift", "Meta", "OS"].includes(e.key)) return null;
@@ -463,20 +476,15 @@ function renderDesigns(): HTMLElement {
   const ordered = [...DESIGN_LIST].sort((a, b) => Number(b.id === "pildora") - Number(a.id === "pildora"));
   for (const info of ordered) {
     const wide = info.id === "pildora";
-    const card = el("button", { className: `design-card${wide ? " wide" : ""}`, type: "button", disabled: !info.ready });
+    const card = el("button", { className: `design-card${wide ? " wide" : ""}`, type: "button" });
     card.setAttribute("role", "radio");
-    const stage = el("div", { className: "stage" });
-    if (info.ready) {
-      const canvas = el("canvas");
-      stage.append(canvas);
-      const design = info.create();
-      // La escala entera más grande que quepa, en píxeles físicos, para que se vea nítido.
-      const box = wide ? STAGE_WIDE : STAGE;
-      const k = Math.max(1, Math.floor(Math.min(box.w / design.width, box.h / design.height) * dpr));
-      views.push(new DesignView(canvas, design, k / dpr));
-    } else {
-      stage.append(el("span", { className: "soon", textContent: "Pronto" }));
-    }
+    const canvas = el("canvas");
+    const stage = el("div", { className: "stage" }, canvas);
+    const design = info.create();
+    // La escala entera más grande que quepa, en píxeles físicos, para que se vea nítido.
+    const box = wide ? STAGE_WIDE : STAGE;
+    const k = Math.max(1, Math.floor(Math.min(box.w / design.width, box.h / design.height) * dpr));
+    views.push(new DesignView(canvas, design, k / dpr));
     card.append(
       stage,
       el("div", { className: "head" }, el("strong", { textContent: info.name }), el("em", { className: "badge", textContent: "En uso" })),
@@ -487,19 +495,33 @@ function renderDesigns(): HTMLElement {
     grid.append(card);
   }
 
-  // Igual que la mesa: si Windows pide reducir el movimiento, la animación completa pasa a reducida.
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const motion = () => (settings.motion === "full" && reduce.matches ? "reduced" : settings.motion);
-  const feed = (first: boolean) =>
-    views.forEach((v) => v.feed(structuredClone(snap), { settings, motion: motion(), cue: () => {} }, first));
+  const feed = (first: boolean) => {
+    const ctx = { settings, motion: effectiveMotion(settings.motion, reduce.matches), cue: () => {} };
+    views.forEach((v) => v.feed(structuredClone(snap), ctx, first));
+  };
   reduce.addEventListener("change", () => feed(true));
   refreshers.push(() => feed(true));
-  window.setInterval(() => {
-    advanceDemo(snap);
-    feed(false);
-  }, 3000);
+
+  // Las vistas previas solo se animan mientras se ven: con la ventana oculta o
+  // en otra sección no gastan nada mientras juegas.
+  let timer: number | undefined;
+  setPreviewsActive = (active: boolean) => {
+    views.forEach((v) => v.setPaused(!active));
+    window.clearInterval(timer);
+    timer = undefined;
+    if (active) {
+      timer = window.setInterval(() => {
+        advanceDemo(snap);
+        feed(false);
+      }, 3000);
+    }
+  };
   return grid;
 }
+
+/** La asigna `renderDesigns`; activa o pausa las vistas previas. */
+let setPreviewsActive: (active: boolean) => void = () => {};
 
 /** Icono pixel en SVG; toma el color del texto. */
 function pixelIcon(map: string[]): SVGSVGElement {
@@ -546,11 +568,11 @@ function drawBrandChip() {
 
 async function start() {
   bridge = await createBridge();
-  settings = await bridge.getSettings();
-  bridge.onSettings((next) => {
+  await bridge.onSettings((next) => {
     settings = next;
     refreshAll();
   });
+  settings = await bridge.getSettings();
 
   const nav = document.querySelector<HTMLElement>("#nav")!;
   const content = document.querySelector<HTMLElement>("#content")!;
@@ -569,13 +591,18 @@ async function start() {
     return { tab, panel };
   });
 
+  let selected = 0;
+  const updatePreviews = () => setPreviewsActive(!document.hidden && SECTIONS[selected].id === "diseno");
+
   function select(index: number) {
+    selected = index;
     panels.forEach(({ tab, panel }, i) => {
       tab.setAttribute("aria-selected", String(i === index));
       tab.tabIndex = i === index ? 0 : -1;
       panel.hidden = i !== index;
     });
     content.scrollTop = 0;
+    updatePreviews();
   }
 
   nav.addEventListener("keydown", (e) => {
@@ -588,7 +615,19 @@ async function start() {
     panels[i].tab.focus();
   });
 
-  document.querySelector("#close")!.addEventListener("click", () => void bridge.hideWindow());
+  document.querySelector("#close")!.addEventListener("click", () => {
+    stopCapture?.();
+    setPreviewsActive(false);
+    void bridge.hideWindow();
+  });
+  // Si la ventana pierde el foco o se oculta, se cancela la captura de atajo
+  // (si no, los atajos globales se quedarían en pausa).
+  window.addEventListener("blur", () => stopCapture?.());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopCapture?.();
+    updatePreviews();
+  });
+  window.addEventListener("focus", updatePreviews);
   drawBrandChip();
   feltTexture();
   select(0);

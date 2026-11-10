@@ -132,7 +132,11 @@ export function engrave(g: G, text: string, x: number, y: number, ink: string, o
 
 // ── Piloto de estado ──────────────────────────────────────────────────────
 
-const LED: Record<string, [string, string, string]> = {
+/** Degradado dorado del letrero «CLAUPIER», de arriba abajo. */
+export const LOGO_GRADIENT = ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"];
+
+/** Colores del piloto (oscuro, medio, brillo) para cada estado. */
+export const LED: Record<"ok" | "wait" | "bad" | "idle", [string, string, string]> = {
   ok: ["#2f9a52", "#5fdc86", "#c4f7d2"],
   wait: ["#a06818", "#f0a24a", "#ffd9a6"],
   bad: ["#9a2e28", "#e5604f", "#ffb4a8"],

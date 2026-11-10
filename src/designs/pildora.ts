@@ -2,7 +2,8 @@
 //   [ficha] 73% @2H17 ┆ SEM 58% ┆ [ficha] $59.31   ●
 // Las cifras que importan (tu banca y el dinero) van en la fuente grande.
 
-import { STATUS_TEXT, bankUrgency, bankValue, formatMoney, formatReset, periodTotals } from "../core/format";
+import { CountUp } from "../core/anim";
+import { STATUS_TEXT, bankUrgency, bankValue, formatMoney, formatMoneyShort, formatReset, periodTotals } from "../core/format";
 import { type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
 import { BRASS, drawGhost, drawLed, layer, rect, rounded } from "../core/paint";
@@ -39,10 +40,7 @@ export class Pildora implements Design {
 
   private snap: Snapshot | null = null;
   private ctx: DesignContext | null = null;
-  private shownCost = 0;
-  private costFrom = 0;
-  private costTo = 0;
-  private costStart = 0;
+  private cost = new CountUp();
   /** Inicio del giro de cada ficha (banca y dinero). */
   private flips: { bank?: number; money?: number } = {};
   private lastBank: number | null = null;
@@ -54,16 +52,13 @@ export class Pildora implements Design {
     const cost = periodTotals(snap, ctx.settings.period).costUsd;
 
     if (animate && bank !== this.lastBank && this.lastBank !== null) this.flips.bank = now;
-    if (animate && Math.floor(cost) > Math.floor(this.costTo)) {
+    if (animate && Math.floor(cost) > Math.floor(this.cost.target)) {
       this.flips.money = now;
       ctx.cue("chip");
     }
     this.lastBank = bank;
 
-    this.costFrom = this.shownCost;
-    this.costTo = cost;
-    this.costStart = now;
-    if (first || ctx.motion !== "full") this.shownCost = cost;
+    this.cost.set(cost, now, animate);
     this.snap = snap;
   }
 
@@ -75,11 +70,7 @@ export class Pildora implements Design {
       if (now - start >= FLIP_MS) this.flips[key] = undefined;
       else busy = true;
     }
-    if (this.shownCost !== this.costTo) {
-      const t = Math.min(1, (now - this.costStart) / 600);
-      this.shownCost = t >= 1 ? this.costTo : this.costFrom + (this.costTo - this.costFrom) * (1 - (1 - t) ** 3);
-      busy = true;
-    }
+    if (this.cost.update(now)) busy = true;
     return busy;
   }
 
@@ -102,6 +93,30 @@ export class Pildora implements Design {
     const settings = this.ctx?.settings;
     const shows = settings?.bankShows ?? "left";
     const shadow = { shadow: C.shadow };
+    const bank = bankValue(plan?.fiveHour, shows);
+    const week = bankValue(plan?.sevenDay, shows);
+    const weekText = week === null ? "..." : `${week}%`;
+    const bankText = bank === null ? STATUS_TEXT[plan?.status ?? "loading"]?.[0] || "..." : `${bank}%`;
+    const bankW = bank === null ? textWidth(bankText) + 5 : textWidth(bankText, "big") + 3;
+    const resetText = bank === null ? "" : formatReset(plan?.fiveHour?.resetsAt);
+    const resetW = textWidth(`@${resetText}`) + 5;
+    /** Lo que ocupa la cuenta atrás (o el hueco que deja si no va). */
+    const resetSpace = (show: boolean) => (bank === null ? 0 : show && resetText ? resetW : 2);
+
+    // Todo tiene que acabar antes del piloto (o del fantasma, si se ve). Si no
+    // cabe, primero se quitan los centavos y después la cuenta atrás.
+    const limit = snap?.ghost ? LED_X - 10 : LED_X - 2;
+    const fixed = 6 + 15 + bankW + 5 + textWidth("SEM") + 3 + textWidth(weekText) + 5 + 5 + 15;
+    const options = settings
+      ? [
+          { money: formatMoney(this.cost.shown, settings), reset: true },
+          { money: formatMoneyShort(this.cost.shown, settings), reset: true },
+          { money: formatMoneyShort(this.cost.shown, settings), reset: false },
+        ]
+      : [{ money: "", reset: true }];
+    const fits = (o: (typeof options)[number]) => fixed + resetSpace(o.reset) + textWidth(o.money, "big") <= limit;
+    const { money, reset: showReset } = options.find(fits) ?? options[options.length - 1];
+
     let x = 6;
 
     // Banca de 5 h
@@ -109,41 +124,31 @@ export class Pildora implements Design {
     const bankPalette = (["bank", "bankWarn", "bankBad"] as const)[urgency];
     drawChip(g, chipSprites(bankPalette, "mini"), x, CHIP_Y, this.flipScale("bank", now));
     x += 11 + 4;
-    const bank = bankValue(plan?.fiveHour, shows);
     const tone = (u: 0 | 1 | 2) => [C.cream, C.warn, C.bad][u];
     if (bank === null) {
-      const word = STATUS_TEXT[plan?.status ?? "loading"]?.[0] || "...";
-      drawText(g, word, x, SMALL_Y, C.warn, shadow);
-      x += textWidth(word) + 5;
+      drawText(g, bankText, x, SMALL_Y, C.warn, shadow);
     } else {
-      const value = `${bank}%`;
-      drawText(g, value, x, BIG_Y, tone(urgency), { font: "big", ...shadow });
-      x += textWidth(value, "big") + 3;
-      const reset = formatReset(plan?.fiveHour?.resetsAt);
-      if (reset) {
-        drawText(g, `@${reset}`, x, SMALL_Y, C.dim, shadow);
-        x += textWidth(`@${reset}`) + 5;
-      } else x += 2;
+      drawText(g, bankText, x, BIG_Y, tone(urgency), { font: "big", ...shadow });
     }
+    x += bankW;
+    if (bank !== null && resetText && showReset) drawText(g, `@${resetText}`, x, SMALL_Y, C.dim, shadow);
+    x += resetSpace(showReset);
     x = this.separator(g, x);
 
     // Semana
     drawText(g, "SEM", x, SMALL_Y, C.dim, shadow);
     x += textWidth("SEM") + 3;
-    const week = bankValue(plan?.sevenDay, shows);
-    const weekText = week === null ? "..." : `${week}%`;
     drawText(g, weekText, x, SMALL_Y, week === null ? C.warn : tone(bankUrgency(plan?.sevenDay)), shadow);
     x += textWidth(weekText) + 5;
     x = this.separator(g, x);
 
     // Dinero del periodo, con la ficha de mayor valor que tenga
-    const counts = chipsFor(this.costTo);
+    const counts = chipsFor(this.cost.target);
     let top = -1;
     counts.forEach((n, i) => n > 0 && (top = i));
     const palette: PaletteName = top >= 0 ? DENOMS[top].palette : "white";
     drawChip(g, chipSprites(palette, "mini"), x, CHIP_Y, this.flipScale("money", now));
     x += 11 + 4;
-    const money = settings ? formatMoney(this.shownCost, settings) : "";
     drawText(g, money, x, BIG_Y, C.gold, { font: "big", ...shadow });
 
     // Fantasma y piloto de estado

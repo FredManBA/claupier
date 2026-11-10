@@ -16,7 +16,7 @@ import {
 } from "../core/format";
 import { BALL, drawBall } from "../core/balls";
 import { drawText, textWidth } from "../core/font";
-import { BRASS, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect } from "../core/paint";
+import { BRASS, LOGO_GRADIENT, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect } from "../core/paint";
 import { DENOMS, chipsFor } from "../core/stack";
 import type { LimitWindow, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
@@ -49,7 +49,6 @@ const C = {
   shadow: "#070a14",
 };
 
-const LOGO = ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"];
 /** Color de la etiqueta de cada casilla: el de su ficha. */
 const DENOM_TEXT = ["#ece6d6", "#ee6b70", "#5fcf86", "#a8a6b8", "#ffac4f"];
 
@@ -161,11 +160,11 @@ export class Pachinko implements Design {
         this.counts[i] = Math.min(this.counts[i], n);
       }
       const missing = n - this.counts[i] - this.balls.filter((b) => b.pocket === i).length - this.queue.filter((p) => p === i).length;
-      for (let k = 0; k < missing; k++) this.queue.push(i);
+      // Demasiadas bolas: las que no caben en la cola entran sin animación.
+      const animated = Math.max(0, Math.min(missing, MAX_QUEUE - this.queue.length));
+      for (let k = 0; k < animated; k++) this.queue.push(i);
+      this.counts[i] += Math.max(0, missing - animated);
     });
-
-    // Demasiadas bolas: las que sobran entran sin animación.
-    while (this.queue.length > MAX_QUEUE) this.counts[this.queue.pop()!]++;
     this.snap = snap;
   }
 
@@ -257,7 +256,7 @@ export class Pachinko implements Design {
     rect(g, 5, 5, 1, H - 10, C.boardDeep);
 
     const logo = "CLAUPIER";
-    drawText(g, logo, Math.floor((W - textWidth(logo, "big")) / 2), 7, LOGO, { font: "big", shadow: C.shadow });
+    drawText(g, logo, Math.floor((W - textWidth(logo, "big")) / 2), 7, LOGO_GRADIENT, { font: "big", shadow: C.shadow });
 
     // Riel cromado con las esquinas de arriba redondeadas
     this.drawRail(g);
@@ -354,7 +353,7 @@ export class Pachinko implements Design {
       }
       const extra = n - POCKET_SLOTS;
       if (extra > 0) {
-        const label = `+${extra}`;
+        const label = extra > 999 ? "+999" : `+${extra}`;
         drawText(g, label, POCKET_X(i) + 1 + Math.floor((15 - textWidth(label)) / 2), POCKET_TOP - 7, C.gold, { shadow: C.shadow });
       }
     });

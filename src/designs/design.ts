@@ -31,6 +31,5 @@ export interface DesignInfo {
   id: DesignId;
   name: string;
   description: string;
-  ready: boolean;
   create(): Design;
 }

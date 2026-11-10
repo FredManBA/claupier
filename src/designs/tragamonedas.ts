@@ -17,7 +17,8 @@ import {
 } from "../core/format";
 import { BAG_H, BAG_W, COINS_PER_BAG, type CoinSpot, SPIN, bagSprite, coinSprite, layoutHeap } from "../core/coins";
 import { drawText, textWidth } from "../core/font";
-import { BRASS, drawGhost, drawPlate, engrave, layer, ledKind, rect, rounded } from "../core/paint";
+import { easeInOut, lerp } from "../core/anim";
+import { BRASS, LED, LOGO_GRADIENT, drawGhost, drawPlate, engrave, layer, ledKind, rect, rounded } from "../core/paint";
 import type { PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
@@ -53,13 +54,6 @@ const C = {
   shadow: "#1a0507",
 };
 
-const LOGO = ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"];
-const TOWER: Record<string, [string, string, string]> = {
-  ok: ["#2f9a52", "#5fdc86", "#c4f7d2"],
-  wait: ["#a06818", "#f0a24a", "#ffd9a6"],
-  bad: ["#9a2e28", "#e5604f", "#ffb4a8"],
-  idle: ["#3c4a44", "#6f8279", "#a9b8b1"],
-};
 
 // Geometría
 const SIGN = { x: 6, y: 8, w: 92, h: 16 };
@@ -118,8 +112,6 @@ const easeOutBack = (t: number) => {
   const c = 1.4;
   return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2;
 };
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 function filler(kind: number): string {
   if (kind === 2) return `$${Math.floor(Math.random() * 900 + 10)}`;
@@ -148,7 +140,7 @@ export class Tragamonedas implements Design {
   private bags = 0;
   private queue = 0;
   private flying: FlyingCoin[] = [];
-  private bagging: { start: number; cued: boolean } | null = null;
+  private bagging: { start: number } | null = null;
   private nextDrop = 0;
 
   setSnapshot(snap: Snapshot, ctx: DesignContext, now: number, first: boolean) {
@@ -268,17 +260,14 @@ export class Tragamonedas implements Design {
     // Embolsado
     if (this.bagging) {
       const t = now - this.bagging.start;
-      if (!this.bagging.cued && t >= BAG_MS) {
-        this.bagging.cued = true;
-        this.ctx?.cue("bag");
-      }
       if (t >= BAG_MS) {
+        this.ctx?.cue("bag");
         this.bags++;
         this.heap = 0;
         this.bagging = null;
       }
     } else if (this.heap >= COINS_PER_BAG && this.flying.length === 0) {
-      this.bagging = { start: now, cued: false };
+      this.bagging = { start: now };
     }
 
     // Siguiente moneda por la ranura
@@ -357,7 +346,7 @@ export class Tragamonedas implements Design {
     rect(g, s.x + 3, s.y + 3, s.w - 6, s.h - 6, C.panel);
     rect(g, s.x + 3, s.y + 3, s.w - 6, 1, C.panelLight);
     const logo = "CLAUPIER";
-    drawText(g, logo, s.x + Math.floor((s.w - textWidth(logo, "big")) / 2), s.y + 4, LOGO, { font: "big", shadow: "#120305" });
+    drawText(g, logo, s.x + Math.floor((s.w - textWidth(logo, "big")) / 2), s.y + 4, LOGO_GRADIENT, { font: "big", shadow: "#120305" });
 
     // Ventana de los rodillos: marco de latón y cristal
     const wx = REEL_X[0] - 3;
@@ -408,7 +397,7 @@ export class Tragamonedas implements Design {
   }
 
   private drawTower(g: CanvasRenderingContext2D, status: PlanStatus | undefined) {
-    const [dark, mid, light] = TOWER[ledKind(status)];
+    const [dark, mid, light] = LED[ledKind(status)];
     const x = Math.floor(BODY_W / 2) - 4;
     rect(g, x + 1, 0, 6, 1, C.ink);
     rect(g, x, 1, 8, 4, C.ink);
@@ -432,7 +421,10 @@ export class Tragamonedas implements Design {
       g.beginPath();
       g.rect(x, REEL_Y, REEL_W, REEL_H);
       g.clip();
-      const center = (t: string) => x + Math.floor((REEL_W - textWidth(t, "big")) / 2);
+      const font = (t: string) => (textWidth(t, "big") <= REEL_W - 2 ? "big" : "small");
+      const center = (t: string) => x + Math.floor((REEL_W - textWidth(t, font(t))) / 2);
+      const put = (t: string, y: number, color: string) =>
+        drawText(g, t, center(t), font(t) === "big" ? y : y + 1, color, { font: font(t) });
       const spinning = reel.spinStart !== undefined && now >= reel.spinStart;
       if (spinning) {
         const t = Math.min(1, (now - reel.spinStart!) / SPIN_MS);
@@ -441,7 +433,7 @@ export class Tragamonedas implements Design {
           const y = Math.round(mid - j * ITEM + pos);
           if (y < REEL_Y - 9 || y > REEL_Y + REEL_H) return;
           const last = j === reel.strip.length - 1;
-          drawText(g, value, center(value), y, last ? reel.color : C.reelFaint, { font: "big" });
+          put(value, y, last ? reel.color : C.reelFaint);
         });
       } else {
         // En reposo: el valor en la línea y marcas arriba y abajo
@@ -449,7 +441,7 @@ export class Tragamonedas implements Design {
           const mx = x + Math.floor(REEL_W / 2) - 4;
           rect(g, mx, mid + dy + 2, 8, 2, C.reelFaint);
         }
-        drawText(g, reel.value, center(reel.value), mid, reel.color, { font: "big" });
+        put(reel.value, mid, reel.color);
       }
       g.restore();
       // Cristal: un reflejo fino arriba

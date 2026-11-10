@@ -14,7 +14,7 @@ export const DENOMS: { value: number; palette: PaletteName; label: string }[] = 
 
 /** Cambio de un monto en dólares a fichas, de la más cara a la más barata. */
 export function chipsFor(costUsd: number): number[] {
-  let rest = Math.floor(Math.max(0, costUsd));
+  let rest = Number.isFinite(costUsd) ? Math.floor(Math.max(0, costUsd)) : 0;
   return [...DENOMS]
     .reverse()
     .map((d) => {
@@ -24,6 +24,12 @@ export function chipsFor(costUsd: number): number[] {
     })
     .reverse();
 }
+
+/**
+ * Fichas que se guardan como máximo por pila. Solo se dibujan unas pocas; el
+ * resto se cuenta, y un dato absurdo no debe crear millones de objetos.
+ */
+const MAX_CHIPS = 9_999;
 
 const DROP_MS = 240;
 const SETTLE_MS = 110;
@@ -62,6 +68,7 @@ export class Stack {
    * - `off`: cambian al instante.
    */
   setTarget(n: number, now: number, motion: Motion | "instant") {
+    n = Number.isFinite(n) ? Math.max(0, Math.min(MAX_CHIPS, Math.floor(n))) : 0;
     this.chips = this.chips.filter((c) => c.state !== "pop");
     const current = this.chips.length;
     if (motion === "off" || motion === "instant") {

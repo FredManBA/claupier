@@ -3,7 +3,12 @@
 // Lo usan la mesa (main.ts) y las vistas previas de los ajustes.
 
 import type { Design, DesignContext } from "../designs/design";
-import type { Snapshot } from "./types";
+import type { Motion, Snapshot } from "./types";
+
+/** Si Windows pide reducir el movimiento, la animación completa pasa a reducida. */
+export function effectiveMotion(motion: Motion, prefersReduced: boolean): Motion {
+  return motion === "full" && prefersReduced ? "reduced" : motion;
+}
 
 export class DesignView {
   private ctx: CanvasRenderingContext2D;
@@ -12,7 +17,7 @@ export class DesignView {
   private k = 1;
   private frameQueued = false;
   private wakeTimer: number | undefined;
-  private stopped = false;
+  private paused = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -22,10 +27,6 @@ export class DesignView {
   ) {
     this.ctx = canvas.getContext("2d")!;
     this.fit();
-  }
-
-  get current() {
-    return this.design;
   }
 
   /** Tamaño del canvas en píxeles físicos. */
@@ -64,14 +65,17 @@ export class DesignView {
   }
 
   requestFrame() {
-    if (this.frameQueued || this.stopped) return;
+    if (this.frameQueued || this.paused) return;
     this.frameQueued = true;
     requestAnimationFrame((now) => this.frame(now));
   }
 
-  stop() {
-    this.stopped = true;
+  /** En pausa no dibuja ni programa nada; al reanudar dibuja el estado actual. */
+  setPaused(paused: boolean) {
+    if (paused === this.paused) return;
+    this.paused = paused;
     window.clearTimeout(this.wakeTimer);
+    if (!paused) this.requestFrame();
   }
 
   private frame(now: number) {

@@ -9,9 +9,10 @@ type Listener<T> = (value: T) => void;
 
 export interface Bridge {
   getSnapshot(): Promise<Snapshot>;
-  onSnapshot(cb: Listener<Snapshot>): void;
+  /** Se resuelve cuando ya está escuchando. */
+  onSnapshot(cb: Listener<Snapshot>): Promise<void>;
   getSettings(): Promise<Settings>;
-  onSettings(cb: Listener<Settings>): void;
+  onSettings(cb: Listener<Settings>): Promise<void>;
   updateSettings(patch: DeepPartial<Settings>): Promise<Settings>;
   fitWindow(width: number, height: number): Promise<void>;
   startDragging(): Promise<void>;
@@ -21,6 +22,8 @@ export interface Bridge {
   testAlert(): Promise<void>;
   hideWindow(): Promise<void>;
   onScaleChanged(cb: () => void): void;
+  /** La ventana cambió de lugar (al arrastrarla o al anclarla). */
+  onMoved(cb: () => void): void;
 }
 
 // ── Tauri ─────────────────────────────────────────────────────────────────
@@ -32,9 +35,9 @@ async function tauriBridge(): Promise<Bridge> {
   const win = getCurrentWindow();
   return {
     getSnapshot: () => invoke<Snapshot>("get_snapshot"),
-    onSnapshot: (cb) => void listen<Snapshot>("snapshot", (e) => cb(e.payload)),
+    onSnapshot: async (cb) => void (await listen<Snapshot>("snapshot", (e) => cb(e.payload))),
     getSettings: () => invoke<Settings>("get_settings"),
-    onSettings: (cb) => void listen<Settings>("settings", (e) => cb(e.payload)),
+    onSettings: async (cb) => void (await listen<Settings>("settings", (e) => cb(e.payload))),
     updateSettings: (patch) => invoke<Settings>("update_settings", { patch }),
     fitWindow: (width, height) => invoke("fit_window", { width, height }),
     startDragging: () => win.startDragging(),
@@ -44,6 +47,7 @@ async function tauriBridge(): Promise<Bridge> {
     testAlert: () => invoke("test_alert"),
     hideWindow: () => win.hide(),
     onScaleChanged: (cb) => void win.onScaleChanged(cb),
+    onMoved: (cb) => void win.onMoved(cb),
   };
 }
 
@@ -134,9 +138,9 @@ function demoBridge(): Bridge {
   const noop = async () => {};
   return {
     getSnapshot: async () => structuredClone(snap),
-    onSnapshot: (cb) => void snapListeners.push(cb),
+    onSnapshot: async (cb) => void snapListeners.push(cb),
     getSettings: async () => structuredClone(settings),
-    onSettings: (cb) => void settingsListeners.push(cb),
+    onSettings: async (cb) => void settingsListeners.push(cb),
     updateSettings: async (patch) => {
       settings = mergeDeep(settings, patch);
       settingsListeners.forEach((cb) => cb(structuredClone(settings)));
@@ -150,6 +154,7 @@ function demoBridge(): Bridge {
     testAlert: noop,
     hideWindow: noop,
     onScaleChanged: () => {},
+    onMoved: () => {},
   };
 }
 

@@ -1,16 +1,21 @@
 import type { LimitWindow, Period, Settings, Snapshot, Totals } from "./types";
 
+// En todos los formatos, cada tramo se elige con el valor ya redondeado:
+// así 999.996 no sale como «$1000.00» ni 99.97 como «$100.0».
+
 export function formatUsd(v: number): string {
-  if (v >= 100_000) return `$${Math.round(v / 1000)}K`;
-  if (v >= 10_000) return `$${(v / 1000).toFixed(1)}K`;
-  if (v >= 1000) return `$${Math.round(v)}`;
+  if (v >= 9_950_000) return `$${Math.round(v / 1e6)}M`;
+  if (v >= 999_500) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 99_950) return `$${Math.round(v / 1000)}K`;
+  if (v >= 9999.5) return `$${(v / 1000).toFixed(1)}K`;
+  if (v >= 999.995) return `$${Math.round(v)}`;
   return `$${v.toFixed(2)}`;
 }
 
 export function formatCrc(v: number): string {
-  if (v >= 10_000_000) return `₡${Math.round(v / 1e6)}M`;
-  if (v >= 1_000_000) return `₡${(v / 1e6).toFixed(1)}M`;
-  if (v >= 10_000) return `₡${Math.round(v / 1000)}K`;
+  if (v >= 9_950_000) return `₡${Math.round(v / 1e6)}M`;
+  if (v >= 999_500) return `₡${(v / 1e6).toFixed(1)}M`;
+  if (v >= 9999.5) return `₡${Math.round(v / 1000)}K`;
   return `₡${Math.round(v)}`;
 }
 
@@ -22,10 +27,10 @@ export function formatMoney(usd: number, s: Pick<Settings, "currency" | "crcPerU
 /** Dinero en 6 caracteres o menos, para espacios chicos (los rodillos). */
 export function formatMoneyShort(usd: number, s: Pick<Settings, "currency" | "crcPerUsd">): string {
   if (s.currency === "CRC") return formatCrc(usd * s.crcPerUsd);
-  if (usd < 10) return `$${usd.toFixed(2)}`;
-  if (usd < 100) return `$${usd.toFixed(1)}`;
-  if (usd < 10_000) return `$${Math.round(usd)}`;
-  if (usd < 100_000) return `$${Math.round(usd / 1000)}K`;
+  if (usd < 9.995) return `$${usd.toFixed(2)}`;
+  if (usd < 99.95) return `$${usd.toFixed(1)}`;
+  if (usd < 9999.5) return `$${Math.round(usd)}`;
+  if (usd < 99_500) return `$${Math.round(usd / 1000)}K`;
   return `$${(usd / 1e6).toFixed(1)}M`;
 }
 

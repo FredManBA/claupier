@@ -7,6 +7,7 @@ import { BALL, drawBall } from "./core/balls";
 import { CHIP_DIMS, PALETTES, type PaletteName, chipSprites, drawChip } from "./core/chips";
 import { SPIN, bagSprite, coinSprite, layoutHeap } from "./core/coins";
 import { drawText } from "./core/font";
+import { LOGO_GRADIENT } from "./core/paint";
 
 const ZOOM = Number(new URLSearchParams(location.search).get("zoom") ?? 6);
 
@@ -61,7 +62,7 @@ sheet(60, 16, "#1b2440", (g) => {
 
 // Fuentes.
 sheet(150, 44, "#3c1519", (g) => {
-  drawText(g, "CLAUPIER", 4, 3, ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"], {
+  drawText(g, "CLAUPIER", 4, 3, LOGO_GRADIENT, {
     font: "big",
     shadow: "#250a0d",
   });
