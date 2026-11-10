@@ -40,6 +40,7 @@ const GLYPHS: Record<string, string[]> = {
   Z: ["###", "..#", ".#.", "#..", "###"],
   // 7 filas: el palito sobresale una fila arriba y otra abajo.
   $: ["..#..", ".####", "#.#..", ".###.", "..#.#", "####.", "..#.."],
+  "₡": [".###.", "#.#.#", "#.#..", "#.#.#", ".###."], // colón
   "%": ["#..", "..#", ".#.", "#..", "..#"],
   ".": ["...", "...", "...", "...", ".#."],
   ",": ["...", "...", "...", ".#.", "#.."],
@@ -125,6 +126,8 @@ export const PALETTES = {
   black: { o: "#08070b", b: "#35333f", s: "#e6dfcf", i: "#4b4958", l: "#64627a", e: "#25232d", d: "#17161c" },
   orange: { o: OUTLINE, b: "#f28a1e", s: "#fff0cf", i: "#ffac4f", l: "#ffc477", e: "#c3640b", d: "#874405" },
   bank: { o: OUTLINE, b: "#3c7fd0", s: "#f1e6d2", i: "#5f9de3", l: "#86b8ef", e: "#2a5d9f", d: "#1b3f70" },
+  bankWarn: { o: OUTLINE, b: "#d99a2b", s: "#fff0cf", i: "#ebb350", l: "#f5c873", e: "#a8721a", d: "#6f4a10" },
+  bankBad: { o: OUTLINE, b: "#c9463c", s: "#f1e6d2", i: "#dc675e", l: "#e8857d", e: "#962f28", d: "#651e1a" },
 } satisfies Record<string, ChipPalette>;
 
 export type PaletteName = keyof typeof PALETTES;

@@ -1,11 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permisos de la ventana principal de Claupier",
-  "windows": ["main"],
+  "description": "Permisos de la mesa (main) y de la ventana de ajustes",
+  "windows": [
+    "main",
+    "ajustes"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "core:window:allow-set-size"
+    "core:window:allow-hide",
+    "core:window:allow-minimize"
   ]
 }

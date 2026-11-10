@@ -15,11 +15,10 @@ use serde::Serialize;
 use serde_json::Value;
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
-const NORMAL_EVERY: Duration = Duration::from_secs(150);
 const RETRY_EVERY: Duration = Duration::from_secs(60);
 const MAX_BACKOFF: Duration = Duration::from_secs(15 * 60);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LimitWindow {
     /// Porcentaje usado, de 0 a 100.
@@ -27,7 +26,7 @@ pub struct LimitWindow {
     pub resets_at: Option<String>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanInfo {
     /// loading | ok | expired | no_credentials | rate_limited | error
@@ -48,6 +47,7 @@ pub struct PlanFetcher {
     credentials: PathBuf,
     client: reqwest::blocking::Client,
     next: Instant,
+    every: Duration,
     backoff: Duration,
     pub info: PlanInfo,
 }
@@ -63,8 +63,17 @@ impl PlanFetcher {
             credentials: claude_dir.join(".credentials.json"),
             client,
             next: Instant::now(),
-            backoff: NORMAL_EVERY,
+            every: Duration::from_secs(180),
+            backoff: Duration::from_secs(180),
             info: PlanInfo::default(),
+        }
+    }
+
+    /// Cada cuánto consultar cuando todo va bien.
+    pub fn set_every(&mut self, every: Duration) {
+        if every != self.every {
+            self.every = every;
+            self.backoff = self.backoff.max(every);
         }
     }
 
@@ -143,8 +152,8 @@ impl PlanFetcher {
         self.info.seven_day = parse_window(&body["seven_day"]);
         self.info.updated_at = Some(chrono::Utc::now().to_rfc3339());
         self.set_status("ok");
-        self.backoff = NORMAL_EVERY;
-        NORMAL_EVERY
+        self.backoff = self.every;
+        self.every
     }
 
     fn read_credentials(&self) -> Option<(String, Option<i64>, Option<String>)> {

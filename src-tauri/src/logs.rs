@@ -1,27 +1,32 @@
 //! Lee los registros locales de Claude Code (`~/.claude/projects/**/*.jsonl`)
-//! y suma los tokens y el gasto equivalente del día.
+//! y calcula los tokens y el gasto equivalente por periodo.
 //!
-//! - Solo abre archivos modificados hoy y lee únicamente lo nuevo (guarda la
-//!   posición de cada archivo), porque la carpeta puede pesar gigas.
+//! - Guarda los mensajes de los últimos 8 días, que cubren la ventana semanal.
+//! - Solo abre archivos modificados en ese rango y lee únicamente lo nuevo
+//!   (guarda la posición de cada archivo), porque la carpeta puede pesar gigas.
+//! - Lee línea a línea, sin cargar archivos enteros en memoria.
 //! - Claude Code escribe varias líneas por mensaje con el mismo `usage`, así que
 //!   se agrupan por id de mensaje y petición, y se queda la más completa.
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
-use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Local, TimeZone, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::pricing::{self, Usage};
 
-#[derive(Clone, Default, Serialize)]
+const KEEP: Duration = Duration::from_secs(8 * 24 * 3600);
+
+#[derive(Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TodayTotals {
-    pub date: String,
+pub struct Totals {
+    /// Desde cuándo se cuenta (ISO 8601).
+    pub since: String,
     pub cost_usd: f64,
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -32,59 +37,52 @@ pub struct TodayTotals {
 }
 
 struct Msg {
+    at: DateTime<Utc>,
     model: String,
     usage: Usage,
 }
 
 pub struct LogScanner {
     root: PathBuf,
-    day: NaiveDate,
     offsets: HashMap<PathBuf, u64>,
     msgs: HashMap<String, Msg>,
-    pub totals: TodayTotals,
 }
 
 impl LogScanner {
     pub fn new(root: PathBuf) -> Self {
-        let day = Local::now().date_naive();
-        Self {
-            root,
-            day,
-            offsets: HashMap::new(),
-            msgs: HashMap::new(),
-            totals: TodayTotals { date: day.to_string(), ..Default::default() },
-        }
+        Self { root, offsets: HashMap::new(), msgs: HashMap::new() }
     }
 
-    /// Devuelve `true` si cambiaron los totales.
+    /// Lee lo nuevo de los registros. Devuelve `true` si entró algún mensaje.
     pub fn scan(&mut self) -> bool {
-        let today = Local::now().date_naive();
-        let mut changed = false;
-        if today != self.day {
-            self.day = today;
-            self.offsets.clear();
-            self.msgs.clear();
-            changed = true;
-        }
-
-        let midnight = Local
-            .from_local_datetime(&today.and_hms_opt(0, 0, 0).unwrap())
-            .earliest()
-            .map(SystemTime::from)
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-
+        let since = SystemTime::now() - KEEP;
         let mut files = Vec::new();
-        collect_jsonl(&self.root, midnight, &mut files, 0);
+        collect_jsonl(&self.root, since, &mut files, 0);
+        let mut changed = false;
         for path in files {
-            if self.read_new_lines(&path) {
-                changed = true;
-            }
+            changed |= self.read_new_lines(&path);
         }
 
-        if changed {
-            self.recompute();
+        let cutoff = Utc::now() - chrono::Duration::from_std(KEEP).unwrap();
+        let before = self.msgs.len();
+        self.msgs.retain(|_, m| m.at >= cutoff);
+        changed || before != self.msgs.len()
+    }
+
+    /// Suma lo gastado desde `since`.
+    pub fn totals_since(&self, since: DateTime<Utc>) -> Totals {
+        let mut t = Totals { since: since.to_rfc3339(), ..Default::default() };
+        for m in self.msgs.values().filter(|m| m.at >= since) {
+            let u = &m.usage;
+            t.cost_usd += pricing::cost_usd(&m.model, u);
+            t.input_tokens += u.input;
+            t.output_tokens += u.output;
+            t.cache_write_tokens += u.cache_write_5m + u.cache_write_1h;
+            t.cache_read_tokens += u.cache_read;
+            t.messages += 1;
         }
-        changed
+        t.total_tokens = t.input_tokens + t.output_tokens + t.cache_write_tokens + t.cache_read_tokens;
+        t
     }
 
     fn read_new_lines(&mut self, path: &Path) -> bool {
@@ -94,27 +92,24 @@ impl LogScanner {
         if len < offset {
             offset = 0; // el archivo se truncó o se reemplazó
         }
-        if len == offset {
+        if len == offset || file.seek(SeekFrom::Start(offset)).is_err() {
             return false;
         }
-        if file.seek(SeekFrom::Start(offset)).is_err() {
-            return false;
-        }
-        let mut buf = Vec::with_capacity((len - offset) as usize);
-        if file.read_to_end(&mut buf).is_err() {
-            return false;
-        }
-        // Solo líneas completas: la última puede estar escribiéndose.
-        let Some(last_nl) = buf.iter().rposition(|&b| b == b'\n') else { return false };
-        let complete = &buf[..=last_nl];
-        self.offsets.insert(path.to_path_buf(), offset + complete.len() as u64);
 
+        let mut reader = BufReader::with_capacity(256 * 1024, file);
+        let mut line = Vec::with_capacity(16 * 1024);
         let mut changed = false;
-        for line in complete.split(|&b| b == b'\n') {
-            if self.ingest(line) {
-                changed = true;
+        loop {
+            line.clear();
+            let Ok(read) = reader.read_until(b'\n', &mut line) else { break };
+            // Fin del archivo, o una última línea que aún se está escribiendo.
+            if read == 0 || line.last() != Some(&b'\n') {
+                break;
             }
+            offset += read as u64;
+            changed |= self.ingest(&line);
         }
+        self.offsets.insert(path.to_path_buf(), offset);
         changed
     }
 
@@ -127,11 +122,9 @@ impl LogScanner {
         if v["type"] != "assistant" {
             return false;
         }
-        let Some(ts) = v["timestamp"].as_str() else { return false };
-        let Ok(ts) = ts.parse::<DateTime<Utc>>() else { return false };
-        if ts.with_timezone(&Local).date_naive() != self.day {
+        let Some(at) = v["timestamp"].as_str().and_then(|s| s.parse::<DateTime<Utc>>().ok()) else {
             return false;
-        }
+        };
 
         let msg = &v["message"];
         let model = msg["model"].as_str().unwrap_or("");
@@ -144,12 +137,11 @@ impl LogScanner {
         }
 
         let n = |val: &Value| val.as_u64().unwrap_or(0);
-        let cw_total = n(&u["cache_creation_input_tokens"]);
         let detail = &u["cache_creation"];
         let (cw5, cw1h) = if detail.is_object() {
             (n(&detail["ephemeral_5m_input_tokens"]), n(&detail["ephemeral_1h_input_tokens"]))
         } else {
-            (cw_total, 0)
+            (n(&u["cache_creation_input_tokens"]), 0)
         };
         let usage = Usage {
             input: n(&u["input_tokens"]),
@@ -167,26 +159,21 @@ impl LogScanner {
         match self.msgs.get(&key) {
             Some(old) if old.usage.output >= usage.output => false,
             _ => {
-                self.msgs.insert(key, Msg { model: model.to_string(), usage });
+                self.msgs.insert(key, Msg { at, model: model.to_string(), usage });
                 true
             }
         }
     }
+}
 
-    fn recompute(&mut self) {
-        let mut t = TodayTotals { date: self.day.to_string(), ..Default::default() };
-        for m in self.msgs.values() {
-            let u = &m.usage;
-            t.cost_usd += pricing::cost_usd(&m.model, u);
-            t.input_tokens += u.input;
-            t.output_tokens += u.output;
-            t.cache_write_tokens += u.cache_write_5m + u.cache_write_1h;
-            t.cache_read_tokens += u.cache_read;
-            t.messages += 1;
-        }
-        t.total_tokens = t.input_tokens + t.output_tokens + t.cache_write_tokens + t.cache_read_tokens;
-        self.totals = t;
-    }
+/// Medianoche local de hoy, en UTC.
+pub fn start_of_today() -> DateTime<Utc> {
+    let today = Local::now().date_naive();
+    Local
+        .from_local_datetime(&today.and_hms_opt(0, 0, 0).unwrap())
+        .earliest()
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(Utc::now)
 }
 
 fn collect_jsonl(dir: &Path, since: SystemTime, out: &mut Vec<PathBuf>, depth: u8) {
@@ -215,11 +202,15 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    fn line(id: &str, output: u64) -> String {
-        let ts = Utc::now().to_rfc3339();
+    fn line_at(id: &str, output: u64, at: DateTime<Utc>) -> String {
+        let ts = at.to_rfc3339();
         format!(
             r#"{{"type":"assistant","timestamp":"{ts}","requestId":"r1","message":{{"id":"{id}","model":"claude-opus-5-5","usage":{{"input_tokens":1000000,"output_tokens":{output},"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}}}}"#
         )
+    }
+
+    fn line(id: &str, output: u64) -> String {
+        line_at(id, output, Utc::now())
     }
 
     #[test]
@@ -229,11 +220,11 @@ mod tests {
         assert!(s.ingest(line("m1", 500).as_bytes()));
         assert!(!s.ingest(line("m1", 400).as_bytes()));
         assert!(s.ingest(line("m2", 0).as_bytes()));
-        s.recompute();
-        assert_eq!(s.totals.messages, 2);
-        assert_eq!(s.totals.input_tokens, 2_000_000);
-        assert_eq!(s.totals.output_tokens, 500);
-        assert!((s.totals.cost_usd - (8.0 + 0.01)).abs() < 1e-9);
+        let t = s.totals_since(Utc::now() - chrono::Duration::hours(1));
+        assert_eq!(t.messages, 2);
+        assert_eq!(t.input_tokens, 2_000_000);
+        assert_eq!(t.output_tokens, 500);
+        assert!((t.cost_usd - 8.01).abs() < 1e-9);
     }
 
     #[test]
@@ -241,5 +232,37 @@ mod tests {
         let mut s = LogScanner::new(PathBuf::from("."));
         let l = line("m1", 10).replace("\"assistant\"", "\"user\"");
         assert!(!s.ingest(l.as_bytes()));
+    }
+
+    #[test]
+    fn cada_periodo_suma_solo_desde_su_inicio() {
+        let mut s = LogScanner::new(PathBuf::from("."));
+        let now = Utc::now();
+        s.ingest(line_at("hace1h", 0, now - chrono::Duration::hours(1)).as_bytes());
+        s.ingest(line_at("hace6h", 0, now - chrono::Duration::hours(6)).as_bytes());
+        s.ingest(line_at("hace3d", 0, now - chrono::Duration::days(3)).as_bytes());
+        assert_eq!(s.totals_since(now - chrono::Duration::hours(5)).messages, 1);
+        assert_eq!(s.totals_since(now - chrono::Duration::days(1)).messages, 2);
+        assert_eq!(s.totals_since(now - chrono::Duration::days(7)).messages, 3);
+    }
+
+    #[test]
+    fn lee_solo_lineas_completas_y_continua_donde_quedo() {
+        let dir = std::env::temp_dir().join(format!("claupier-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("s.jsonl");
+        // La segunda línea queda a medias, como si Claude Code la estuviera escribiendo.
+        let partial = line("m2", 7);
+        fs::write(&file, format!("{}\n{}", line("m1", 5), &partial[..40])).unwrap();
+
+        let mut s = LogScanner::new(dir.clone());
+        assert!(s.scan());
+        assert_eq!(s.totals_since(Utc::now() - chrono::Duration::hours(1)).messages, 1);
+
+        fs::write(&file, format!("{}\n{}\n", line("m1", 5), partial)).unwrap();
+        assert!(s.scan());
+        assert_eq!(s.totals_since(Utc::now() - chrono::Duration::hours(1)).messages, 2);
+        assert!(!s.scan(), "sin cambios no hay nada nuevo");
+        fs::remove_dir_all(&dir).ok();
     }
 }

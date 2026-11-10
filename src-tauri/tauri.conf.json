@@ -15,7 +15,7 @@
         "label": "main",
         "title": "Claupier",
         "width": 300,
-        "height": 354,
+        "height": 351,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,
@@ -26,7 +26,24 @@
         "skipTaskbar": true,
         "focus": false,
         "focusable": false,
-        "center": true
+        "center": true,
+        "visible": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
+      },
+      {
+        "label": "ajustes",
+        "title": "Ajustes de Claupier",
+        "url": "settings.html",
+        "width": 560,
+        "height": 600,
+        "resizable": false,
+        "maximizable": false,
+        "decorations": false,
+        "transparent": false,
+        "shadow": true,
+        "visible": false,
+        "center": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required"
       }
     ],
     "security": {
@@ -35,7 +52,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
