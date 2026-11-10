@@ -1,10 +1,8 @@
 // Mesa «El crupier». Se lee de arriba abajo:
-//   marquesina — las bombillas son lo que te queda de la semana
-//   lámpara    — la luz de estado del plan
-//   pozo       — el gasto del periodo, en fichas por denominación
-//   rastrillo  — cuando baja tu banca, el crupier se lleva tus fichas al pozo
-//   tu banca   — tus fichas de la ventana de 5 h, del lado del jugador
-//   placa      — dinero y tokens del periodo
+//   cartel    — el nombre, el piloto del plan y lo que queda de la semana
+//   pozo      — el gasto del periodo, en fichas sobre su casilla impresa
+//   tu banca  — tus fichas de la ventana de 5 h; cuando baja, se deslizan al pozo
+//   placa     — dinero y tokens del periodo
 
 import {
   PERIOD_LABEL,
@@ -16,69 +14,59 @@ import {
   formatTokens,
   periodTotals,
 } from "../core/format";
-import { CHIP_H, CHIP_STEP, chipSprites, drawChip, drawText, textWidth } from "../core/pixel";
+import { CHIP_DIMS, type PaletteName, chipSprites, drawChip } from "../core/chips";
+import { drawText, textWidth } from "../core/font";
+import { BRASS, drawFelt, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect, rounded, shadow } from "../core/paint";
 import { DENOMS, Stack, chipsFor } from "../core/stack";
-import type { LimitWindow, Snapshot } from "../core/types";
+import type { LimitWindow, Motion, PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
-const W = 100;
-const H = 156;
+const W = 112;
+const H = 150;
 
 const C = {
   ink: "#0b1a12",
-  rail: "#5a3a22",
-  railLight: "#8a5a32",
-  trim: "#c99a3e",
-  trimDark: "#7d5a1e",
-  felt: "#1a4532",
-  feltDark: "#143a2a",
-  feltEdge: "#123326",
-  sign: "#3a1418",
-  signDark: "#260c10",
-  bulbOn: "#ffcf5a",
-  bulbBright: "#ffe08a",
-  bulbOff: "#4a2a20",
+  wood: { ink: "#120b06", dark: "#3e2716", base: "#5c3a22", light: "#7a4d2c", shine: "#9a653a" },
+  felt: { base: "#1a4532", dark: "#153a2a", light: "#20503a", edge: "#10301f" },
+  print: "#2a5d43",
+  printText: "#5f9b7b",
+  line: "#7d6a2e",
+  sign: "#3c1519",
+  signLight: "#4d1c21",
+  signDark: "#250a0d",
+  signText: "#d9b2a2",
   cream: "#f1e6c8",
-  dim: "#86b39a",
+  dim: "#8fbaa2",
   gold: "#f0b64e",
   warn: "#f0a24a",
   bad: "#e56a5f",
-  ok: "#6fdc8c",
-  ghost: "#cfe3ff",
-  brass: "#b8862f",
-  brassLight: "#d9a948",
-  brassDark: "#6e4c16",
-  wood: "#a8743e",
-  woodDark: "#5a3a22",
+  shadow: "#0a1a12",
 };
 
+const LOGO = ["#ffe9a8", "#ffd873", "#f7c35a", "#efb04c", "#e09c3e", "#cc8733", "#b47228"];
+
 // Geometría
-const MARQUEE = { x: 4, y: 4, w: 92, h: 27 };
-const BULBS = 10;
-const LAMP_X = 50;
-const POT_BASE = 84;
-const BANK_BASE = 125;
-const BANK_X = [8, 26];
-const PLATE = { x: 6, y: 132, w: 88, h: 17 };
-/** Dónde descansa la cabeza del rastrillo, del lado del crupier. */
-const RAKE_REST = { x: 74, y: 37 };
-const RAKE_DROP = { x: 46, y: 68 };
+const SIGN = { x: 7, y: 7, w: 98, h: 24 };
+const POT_BASE = 75;
+const POT_X = (i: number) => 7 + i * 20;
+const BANK_BASE = 122;
+const BANK_X = [8, 28];
+const PLATE = { x: 7, y: 127, w: 98, h: 16 };
+/** Adonde se deslizan tus fichas: el centro del pozo. */
+const POT_CENTER = { x: 47, y: 44 };
 
-const REACH_MS = 380;
-const DRAG_MS = 520;
-const RETURN_MS = 320;
-const CHASE_MS = 450;
+const GLIDE_MS = 560;
+const GLIDE_STAGGER = 90;
 
-interface RakeTrip {
-  phase: "reach" | "drag" | "return";
-  start: number;
-  /** Fichas que se lleva en este viaje. */
-  take: number;
-  /** Desde dónde las agarra. */
+interface Glider {
   from: { x: number; y: number };
+  start: number;
+  palette: PaletteName;
+  landed: boolean;
 }
 
-const ease = (t: number) => 1 - (1 - t) ** 3;
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export class Mesa implements Design {
@@ -86,22 +74,18 @@ export class Mesa implements Design {
   readonly width = W;
   readonly height = H;
 
-  private pot = DENOMS.map((d, i) => new Stack(4 + i * 19, POT_BASE, d.palette, 8, C.feltDark));
-  private bank = BANK_X.map((x) => new Stack(x, BANK_BASE, "bank", 5, C.feltDark));
+  private pot = DENOMS.map((d, i) => new Stack(POT_X(i), POT_BASE, d.palette, 6));
+  private bank = BANK_X.map((x) => new Stack(x, BANK_BASE, "bank", 5));
   private snap: Snapshot | null = null;
   private ctx: DesignContext | null = null;
-  /** Fichas de la banca que se ven (sin contar las que el rastrillo ya se llevó). */
+  /** Fichas de tu banca que se ven ahora mismo. */
   private bankChips = 0;
-  /** Fichas que el rastrillo todavía tiene que llevarse. */
-  private pendingTake = 0;
-  private trip: RakeTrip | null = null;
+  private gliders: Glider[] = [];
   private shownCost = 0;
   private costFrom = 0;
   private costTo = 0;
   private costStart = 0;
   private nextFlip = 0;
-  private chaseStep = 0;
-  private nextChase = 0;
 
   constructor() {
     for (const s of this.pot) s.onLand = () => this.ctx?.cue("chip");
@@ -116,13 +100,15 @@ export class Mesa implements Design {
 
     const v = bankValue(snap.plan.fiveHour, shows);
     const target = v === null ? 0 : Math.max(0, Math.min(10, Math.ceil(v / 10)));
-    const showing = this.bankChips - this.pendingTake;
-    if (motion === "full" && shows === "left" && target < showing) {
-      // El crupier se las lleva con el rastrillo.
-      this.pendingTake += showing - target;
+    if (motion === "full" && shows === "left" && target < this.bankChips) {
+      // Las que sobran se deslizan al pozo, la de arriba primero.
+      const palette = this.bankPalette(snap.plan.fiveHour);
+      for (let k = this.bankChips - 1, j = 0; k >= target; k--, j++) {
+        this.gliders.push({ from: this.chipAt(k), start: now + j * GLIDE_STAGGER, palette, landed: false });
+      }
+      this.setBank(target, now, "instant");
     } else {
-      this.pendingTake = 0;
-      this.trip = null;
+      if (motion !== "full") this.gliders = [];
       this.setBank(target, now, motion);
     }
 
@@ -135,18 +121,20 @@ export class Mesa implements Design {
     this.snap = snap;
   }
 
-  private setBank(n: number, now: number, motion: Parameters<Stack["setTarget"]>[2]) {
+  private setBank(n: number, now: number, motion: Motion | "instant") {
     this.bankChips = n;
     this.bank[0].setTarget(Math.min(5, n), now, motion);
     this.bank[1].setTarget(Math.max(0, n - 5), now, motion);
   }
 
-  /** Posición de la ficha de arriba de tu banca. */
-  private bankTop() {
-    const n = this.bankChips;
-    const stack = n > 5 ? this.bank[1] : this.bank[0];
-    const i = Math.max(0, (n > 5 ? n - 5 : n) - 1);
-    return { x: stack.x + 8, y: stack.chipY(i) + 2 };
+  /** Posición de la ficha `k` de tu banca (0 = la de abajo de la primera pila). */
+  private chipAt(k: number) {
+    const stack = k >= 5 ? this.bank[1] : this.bank[0];
+    return { x: stack.x, y: stack.chipY(k % 5) };
+  }
+
+  private bankPalette(win: LimitWindow | null | undefined): PaletteName {
+    return (["bank", "bankWarn", "bankBad"] as const)[bankUrgency(win)];
   }
 
   // ── Animación ────────────────────────────────────────────────────────────
@@ -155,61 +143,40 @@ export class Mesa implements Design {
     let busy = false;
     for (const s of [...this.pot, ...this.bank]) busy = s.update(now) || busy;
 
-    // Rastrillo
-    if (!this.trip && this.pendingTake > 0) {
-      this.trip = { phase: "reach", start: now, take: this.pendingTake, from: this.bankTop() };
-      this.ctx?.cue("rake");
-    }
-    if (this.trip) {
-      busy = true;
-      const t = now - this.trip.start;
-      if (this.trip.phase === "reach" && t >= REACH_MS) {
-        // Agarra las fichas: desaparecen de tu banca y viajan en el rastrillo.
-        this.setBank(this.bankChips - this.trip.take, now, "instant");
-        this.pendingTake -= this.trip.take;
-        this.trip = { ...this.trip, phase: "drag", start: now };
-      } else if (this.trip.phase === "drag" && t >= DRAG_MS) {
+    for (const gl of this.gliders) {
+      if (!gl.landed && now - gl.start >= GLIDE_MS) {
+        gl.landed = true;
         this.ctx?.cue("chip");
-        this.trip = { ...this.trip, phase: "return", start: now };
-      } else if (this.trip.phase === "return" && t >= RETURN_MS) {
-        this.trip = null;
       }
     }
+    this.gliders = this.gliders.filter((gl) => now - gl.start < GLIDE_MS);
+    if (this.gliders.length > 0) busy = true;
 
     // El monto cuenta hasta el valor nuevo.
     if (this.shownCost !== this.costTo) {
       const t = Math.min(1, (now - this.costStart) / 600);
-      this.shownCost = t >= 1 ? this.costTo : lerp(this.costFrom, this.costTo, ease(t));
+      this.shownCost = t >= 1 ? this.costTo : lerp(this.costFrom, this.costTo, easeOut(t));
       busy = true;
     }
 
-    if (this.ctx?.motion === "full") {
-      // Recorrido lento de las bombillas encendidas.
-      if (now >= this.nextChase) {
-        this.chaseStep++;
-        this.nextChase = now + CHASE_MS;
-      }
-      // De vez en cuando gira la ficha de arriba de alguna pila.
-      if (now >= this.nextFlip) {
-        if (this.nextFlip !== 0) {
-          const pick = [...this.pot, ...this.bank]
-            .map((s) => s.topRestingChip())
-            .filter((c) => c !== undefined)
-            .sort(() => Math.random() - 0.5)[0];
-          if (pick) {
-            pick.flipStart = now;
-            busy = true;
-          }
+    // De vez en cuando gira la ficha de arriba de alguna pila.
+    if (this.ctx?.motion === "full" && now >= this.nextFlip) {
+      if (this.nextFlip !== 0) {
+        const tops = [...this.pot, ...this.bank].map((s) => s.topRestingChip()).filter((c) => c !== undefined);
+        const pick = tops[Math.floor(Math.random() * tops.length)];
+        if (pick) {
+          pick.flipStart = now;
+          busy = true;
         }
-        this.nextFlip = now + 5000 + Math.random() * 5000;
       }
+      this.nextFlip = now + 7000 + Math.random() * 6000;
     }
     return busy;
   }
 
   msUntilIdleEvent(now: number): number {
     if (this.ctx?.motion !== "full") return 30_000;
-    return Math.max(0, Math.min(this.nextFlip, this.nextChase) - now);
+    return Math.max(0, this.nextFlip - now);
   }
 
   // ── Dibujo ───────────────────────────────────────────────────────────────
@@ -221,205 +188,158 @@ export class Mesa implements Design {
     const settings = this.ctx?.settings;
     const shows = settings?.bankShows ?? "left";
 
-    this.drawTable(g);
-    this.drawMarquee(g, plan?.sevenDay, plan?.status);
-    this.drawLamp(g, plan?.status);
-    if (snap?.ghost) this.drawGhost(g, 89, 34);
+    g.drawImage(layer("mesa:fondo", W, H, (b) => this.drawTable(b)), 0, 0);
+    this.drawSign(g, plan?.sevenDay, plan?.status, snap?.ghost ?? false);
 
     // Pozo
     const period = settings?.period ?? "today";
-    drawText(g, `POZO ${PERIOD_LABEL[period]}`, 8, 39, C.dim);
+    drawText(g, `POZO ${PERIOD_LABEL[period]}`, 9, 34, C.dim);
     for (const s of this.pot) {
       const extra = s.count - s.maxVisible;
       if (extra > 0) {
         const label = `+${extra}`;
-        drawText(g, label, s.x + 8 - Math.floor(textWidth(label) / 2), 46, C.gold);
+        drawText(g, label, s.x + 9 - Math.floor(textWidth(label) / 2), s.chipY(s.maxVisible - 1) - 7, C.gold, { shadow: C.shadow });
       }
       s.draw(g, now);
     }
 
-    // Línea de apuestas
-    g.fillStyle = C.trimDark;
-    for (let x = 8; x < W - 8; x += 2) g.fillRect(x, 89, 1, 1);
-
     // Tu banca
-    drawText(g, shows === "used" ? "USADO 5H" : "TU BANCA 5H", 8, 93, C.dim);
-    const palette = (["bank", "bankWarn", "bankBad"] as const)[bankUrgency(plan?.fiveHour)];
+    drawText(g, shows === "used" ? "USADO 5H" : "TU BANCA 5H", 9, 90, C.dim);
+    const palette = this.bankPalette(plan?.fiveHour);
     for (const s of this.bank) s.draw(g, now, palette);
     this.drawBankText(g, plan?.fiveHour, plan?.status);
 
-    this.drawRake(g, now, palette);
+    this.drawGliders(g, now);
     this.drawPlate(g, snap);
   }
 
+  /** Lo que no cambia: marco, paño, casillas impresas y la línea de puntos. */
   private drawTable(g: CanvasRenderingContext2D) {
-    const rect = (x: number, y: number, w: number, h: number, c: string) => {
-      g.fillStyle = c;
-      g.fillRect(x, y, w, h);
-    };
-    // Baranda de madera con esquinas en escalón
-    const rounded = (inset: number, c: string) => {
-      const x0 = inset, y0 = inset, w = W - inset * 2, h = H - inset * 2;
-      rect(x0 + 2, y0, w - 4, h, c);
-      rect(x0 + 1, y0 + 1, w - 2, h - 2, c);
-      rect(x0, y0 + 2, w, h - 4, c);
-    };
-    rounded(0, C.ink);
-    rounded(1, C.rail);
-    rect(3, 2, W - 6, 1, C.railLight);
-    rounded(3, C.ink);
-    rounded(4, C.felt);
+    drawWoodFrame(g, W, H, C.wood);
+    drawFelt(g, 5, 5, W - 10, H - 10, C.felt);
 
-    // Paño: textura de puntos y bordes un poco más oscuros (sin movimiento)
-    g.fillStyle = C.feltDark;
-    for (let y = 6; y < H - 5; y += 4) {
-      for (let x = 6 + ((y / 4) % 2) * 2; x < W - 5; x += 4) g.fillRect(x, y, 1, 1);
-    }
-    g.fillStyle = C.feltEdge;
-    rect(5, 5, W - 10, 1, C.feltEdge);
-    rect(5, H - 6, W - 10, 1, C.feltEdge);
-    rect(5, 5, 1, H - 10, C.feltEdge);
-    rect(W - 6, 5, 1, H - 10, C.feltEdge);
+    // Casillas del pozo, impresas en el paño con su valor.
+    DENOMS.forEach((d, i) => {
+      const cx = POT_X(i) + 9;
+      ring(g, cx, POT_BASE - 3, 20, 8, C.print);
+      drawText(g, d.label, cx - Math.floor(textWidth(d.label) / 2), POT_BASE + 3, C.printText);
+    });
+
+    // Línea de apuestas
+    g.fillStyle = C.line;
+    for (let x = 9; x < W - 9; x += 2) g.fillRect(x, 86, 1, 1);
   }
 
-  private drawMarquee(g: CanvasRenderingContext2D, week: LimitWindow | null | undefined, status: string | undefined) {
-    const { x, y, w, h } = MARQUEE;
-    g.fillStyle = C.ink;
-    g.fillRect(x, y, w, h);
-    g.fillStyle = C.trim;
-    g.fillRect(x + 1, y + 1, w - 2, h - 2);
-    g.fillStyle = C.sign;
-    g.fillRect(x + 2, y + 2, w - 4, h - 4);
-    g.fillStyle = C.signDark;
-    g.fillRect(x + 2, y + h - 3, w - 4, 1);
+  private drawSign(g: CanvasRenderingContext2D, week: LimitWindow | null | undefined, status: PlanStatus | undefined, ghost: boolean) {
+    g.drawImage(
+      layer("mesa:cartel", W, 34, (b) => {
+        const { x, y, w, h } = SIGN;
+        rounded(b, x, y, w, h, C.ink, 2);
+        rounded(b, x + 1, y + 1, w - 2, h - 2, BRASS.base, 1);
+        rect(b, x + 2, y + 1, w - 4, 1, BRASS.shine);
+        rect(b, x + 2, y + h - 2, w - 4, 1, BRASS.dark);
+        rect(b, x + 2, y + 2, w - 4, h - 4, C.ink);
+        rect(b, x + 3, y + 3, w - 6, h - 6, C.sign);
+        rect(b, x + 3, y + 3, w - 6, 2, C.signLight);
+        rect(b, x + 3, y + h - 4, w - 6, 1, C.signDark);
+        const logo = "CLAUPIER";
+        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big")) / 2), y + 4, LOGO, { font: "big", shadow: C.signDark });
+      }),
+      0,
+      0,
+    );
+    const { x, y, w } = SIGN;
+    drawLed(g, x + w - 10, y + 5, status);
+    if (ghost) drawGhost(g, x + 6, y + 5);
 
-    // Bombillas: lo que queda (o lo usado) de la semana, 10 % cada una
+    // La semana, debajo del nombre
     const shows = this.ctx?.settings.bankShows ?? "left";
     const v = bankValue(week, shows);
-    const lit = v === null ? 0 : Math.max(0, Math.min(BULBS, Math.ceil(v / 10)));
-    const chase = this.ctx?.motion === "full" && lit > 0 ? this.chaseStep % lit : -1;
-    for (let i = 0; i < BULBS; i++) {
-      const bx = x + 6 + i * 9;
-      const by = y + 4;
-      const on = i < lit;
-      g.fillStyle = C.ink;
-      g.fillRect(bx - 1, by - 1, 5, 5);
-      g.fillStyle = on ? (i === chase ? C.bulbBright : C.bulbOn) : C.bulbOff;
-      g.fillRect(bx, by, 3, 3);
-      if (on) {
-        g.fillStyle = C.bulbBright;
-        g.fillRect(bx, by, 1, 1);
-      }
-    }
-
-    // Texto: el nombre y, debajo, la semana
-    const center = (text: string) => x + Math.floor((w - textWidth(text)) / 2);
-    drawText(g, "CLAUPIER", center("CLAUPIER"), y + 10, C.gold);
-    const label = v === null ? STATUS_TEXT[status ?? "loading"]?.[0] || "..." : `SEM ${v}%`;
+    const parts: [string, string][] =
+      v === null
+        ? [[(STATUS_TEXT[status ?? "loading"] ?? STATUS_TEXT.loading).filter(Boolean).join(" ") || "...", C.warn]]
+        : [
+            ["SEM ", C.signText],
+            [`${v}%`, [C.cream, C.warn, C.bad][bankUrgency(week)]],
+          ];
     const reset = v === null ? "" : formatReset(week?.resetsAt);
-    const line = reset ? `${label}  @${reset}` : label;
-    const color = v === null ? C.warn : [C.cream, C.warn, C.bad][bankUrgency(week)];
-    drawText(g, line, center(line), y + 17, color);
-  }
-
-  private drawLamp(g: CanvasRenderingContext2D, status: string | undefined) {
-    const color = status === "ok" ? C.ok : status === "loading" || !status ? C.dim : status === "rate_limited" ? C.warn : C.bad;
-    g.fillStyle = C.ink;
-    g.fillRect(LAMP_X, 31, 1, 2); // cable
-    g.fillRect(LAMP_X - 3, 33, 7, 3); // pantalla
-    g.fillStyle = C.brassDark;
-    g.fillRect(LAMP_X - 2, 33, 5, 2);
-    g.fillStyle = color;
-    g.fillRect(LAMP_X - 1, 35, 3, 1); // luz
+    if (reset) parts.push([`  @${reset}`, C.signText]);
+    const total = textWidth(parts.map((p) => p[0]).join(""));
+    let cx = x + Math.floor((w - total) / 2);
+    for (const [text, color] of parts) {
+      drawText(g, text, cx, y + 13, color, { shadow: C.signDark });
+      cx += textWidth(text) + (text.endsWith(" ") ? 0 : 1);
+    }
   }
 
   private drawBankText(g: CanvasRenderingContext2D, win: LimitWindow | null | undefined, status: string | undefined) {
-    const x = 48;
+    const x = 52;
     const value = bankValue(win, this.ctx?.settings.bankShows ?? "left");
     if (value === null) {
       const [a, b] = STATUS_TEXT[status ?? "loading"] ?? STATUS_TEXT.loading;
-      drawText(g, a || "...", x, 104, C.warn);
-      if (b) drawText(g, b, x, 111, C.warn);
+      drawText(g, a || "...", x, 101, C.warn, { shadow: C.shadow });
+      if (b) drawText(g, b, x, 108, C.warn, { shadow: C.shadow });
       return;
     }
     const color = [C.cream, C.warn, C.bad][bankUrgency(win)];
-    drawText(g, `${value}%`, x, 102, color, 2);
+    drawText(g, `${value}%`, x, 100, color, { font: "big", shadow: C.shadow });
     const reset = formatReset(win?.resetsAt);
-    if (reset) drawText(g, `@${reset}`, x, 116, C.dim);
+    if (reset) drawText(g, `@${reset}`, x, 111, C.dim);
   }
 
-  private drawRake(g: CanvasRenderingContext2D, now: number, palette: Parameters<typeof chipSprites>[0]) {
-    let head = RAKE_REST;
-    let carrying = 0;
-    const trip = this.trip;
-    if (trip) {
-      const t = Math.min(1, (now - trip.start) / { reach: REACH_MS, drag: DRAG_MS, return: RETURN_MS }[trip.phase]);
-      const k = ease(t);
-      if (trip.phase === "reach") head = { x: lerp(RAKE_REST.x, trip.from.x, k), y: lerp(RAKE_REST.y, trip.from.y, k) };
-      else if (trip.phase === "drag") {
-        head = { x: lerp(trip.from.x, RAKE_DROP.x, k), y: lerp(trip.from.y, RAKE_DROP.y, k) };
-        carrying = trip.take;
-      } else head = { x: lerp(RAKE_DROP.x, RAKE_REST.x, k), y: lerp(RAKE_DROP.y, RAKE_REST.y, k) };
+  private drawGliders(g: CanvasRenderingContext2D, now: number) {
+    const d = CHIP_DIMS.big;
+    for (const gl of this.gliders) {
+      const t = (now - gl.start) / GLIDE_MS;
+      const sprites = chipSprites(gl.palette);
+      if (t <= 0) {
+        drawChip(g, sprites, gl.from.x, gl.from.y);
+        continue;
+      }
+      const k = easeInOut(Math.min(1, t));
+      // Arco: sube un poco al despegar y baja al llegar.
+      const x = lerp(gl.from.x, POT_CENTER.x, k);
+      const y = lerp(gl.from.y, POT_CENTER.y, k) - Math.sin(k * Math.PI) * 10;
+      shadow(g, x + d.w / 2 + 1, lerp(gl.from.y + d.h, POT_CENTER.y + d.h, k) + 2, d.w - 2, 4, 0.2);
+      // Al llegar al pozo se desvanece en dos pasos, sin posarse.
+      g.globalAlpha = t < 0.72 ? 1 : t < 0.86 ? 0.6 : 0.3;
+      drawChip(g, sprites, x, y);
+      g.globalAlpha = 1;
     }
-    const hx = Math.round(head.x);
-    const hy = Math.round(head.y);
-
-    // Fichas que arrastra, delante de la cabeza del rastrillo
-    if (carrying > 0) {
-      const sprites = chipSprites(palette);
-      const shown = Math.min(3, carrying);
-      for (let i = 0; i < shown; i++) drawChip(g, sprites, hx - 8, hy + 2 - CHIP_H - i * CHIP_STEP + 6);
-    }
-
-    // Mango: del centro de la cabeza hacia la esquina del crupier
-    const endX = W - 6;
-    const endY = 32;
-    const steps = Math.max(Math.abs(endX - hx), Math.abs(endY - hy));
-    for (let i = 0; i <= steps; i++) {
-      const px = Math.round(lerp(hx, endX, i / steps));
-      const py = Math.round(lerp(hy - 1, endY, i / steps));
-      g.fillStyle = C.ink;
-      g.fillRect(px, py + 1, 1, 1);
-      g.fillStyle = C.wood;
-      g.fillRect(px, py, 1, 1);
-    }
-    // Cabeza
-    g.fillStyle = C.ink;
-    g.fillRect(hx - 8, hy - 1, 16, 4);
-    g.fillStyle = C.wood;
-    g.fillRect(hx - 7, hy, 14, 1);
-    g.fillStyle = C.woodDark;
-    g.fillRect(hx - 7, hy + 1, 14, 1);
   }
 
   private drawPlate(g: CanvasRenderingContext2D, snap: Snapshot | null) {
     const { x, y, w, h } = PLATE;
-    g.fillStyle = C.ink;
-    g.fillRect(x, y, w, h);
-    g.fillStyle = C.brassDark;
-    g.fillRect(x + 1, y + 1, w - 2, h - 2);
-    g.fillStyle = C.brass;
-    g.fillRect(x + 1, y + 1, w - 2, h - 3);
-    g.fillStyle = C.brassLight;
-    g.fillRect(x + 1, y + 1, w - 2, 1);
-    // Tornillos
-    g.fillStyle = C.brassDark;
-    for (const sx of [x + 2, x + w - 3]) {
-      g.fillRect(sx, y + 3, 1, 1);
-      g.fillRect(sx, y + h - 5, 1, 1);
-    }
-
+    g.drawImage(layer("mesa:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
     const settings = this.ctx?.settings;
-    const money = settings ? formatMoney(this.shownCost, settings) : "";
-    drawText(g, money, x + 5, y + 6, C.ink);
-    const totals = snap && settings ? periodTotals(snap, settings.period) : null;
+    if (!settings) return;
+    engrave(g, formatMoney(this.shownCost, settings), x + 5, y + 4, BRASS.ink, { font: "big" });
+    const totals = snap ? periodTotals(snap, settings.period) : null;
     const tokens = `${formatTokens(totals?.totalTokens ?? 0)} TOK`;
-    drawText(g, tokens, x + w - 5 - textWidth(tokens), y + 6, C.brassDark);
+    engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 6, "#4a3210");
   }
+}
 
-  private drawGhost(g: CanvasRenderingContext2D, x: number, y: number) {
-    const rows = [".###.", "#####", "#.#.#", "#####", "#.#.#"];
-    g.fillStyle = C.ghost;
-    rows.forEach((row, r) => [...row].forEach((ch, c) => ch === "#" && g.fillRect(x + c, y + r, 1, 1)));
+/** Anillo elíptico de 1 px (la casilla impresa en el paño). */
+function ring(g: CanvasRenderingContext2D, cx: number, cy: number, w: number, h: number, color: string) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const r = c.getContext("2d")!;
+  ellipse(r, w, h, 0, color);
+  r.globalCompositeOperation = "destination-out";
+  ellipse(r, w, h, 1, "#000");
+  g.drawImage(c, Math.round(cx - w / 2), Math.round(cy - h / 2));
+}
+
+/** Elipse rellena, fila por fila, metida `inset` píxeles hacia dentro. */
+function ellipse(g: CanvasRenderingContext2D, w: number, h: number, inset: number, color: string) {
+  g.fillStyle = color;
+  const a = w / 2 - inset;
+  const b = h / 2 - inset;
+  for (let y = inset; y < h - inset; y++) {
+    const dy = (y + 0.5 - h / 2) / b;
+    const half = Math.round(a * Math.sqrt(Math.max(0, 1 - dy * dy)));
+    if (half > 0) g.fillRect(Math.round(w / 2 - half), y, half * 2, 1);
   }
 }

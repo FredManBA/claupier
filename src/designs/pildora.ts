@@ -1,30 +1,35 @@
 // Píldora compacta: una sola fila, pensada para dejarla encima de un juego.
-//   [ficha] 73% ⏱2H17 │ SEM 58% │ [ficha] $59.31 •
+//   [ficha] 73% @2H17 ┆ SEM 58% ┆ [ficha] $59.31   ●
+// Las cifras que importan (tu banca y el dinero) van en la fuente grande.
 
 import { STATUS_TEXT, bankUrgency, bankValue, formatMoney, formatReset, periodTotals } from "../core/format";
-import { type PaletteName, chipSprites, drawChip, drawText } from "../core/pixel";
+import { type PaletteName, chipSprites, drawChip } from "../core/chips";
+import { drawText, textWidth } from "../core/font";
+import { BRASS, drawGhost, drawLed, layer, rect, rounded } from "../core/paint";
 import { DENOMS, chipsFor } from "../core/stack";
 import type { Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
-const W = 158;
-const H = 16;
+const W = 170;
+const H = 18;
 const FLIP_MS = 520;
-const TEXT_Y = 6;
+const BIG_Y = 6;
+const SMALL_Y = 7;
+const CHIP_Y = 6;
+const LED_X = W - 11;
 
 const C = {
   ink: "#0b1a12",
-  trim: "#c99a3e",
-  felt: "#143a2a",
-  feltLight: "#1f5040",
-  sep: "#7d5a1e",
+  felt: "#173f2e",
+  feltLight: "#21523c",
+  feltDark: "#12321f",
+  sep: "#6e5a24",
   cream: "#f1e6c8",
-  dim: "#86b39a",
+  dim: "#8fbaa2",
   gold: "#f0b64e",
   warn: "#f0a24a",
   bad: "#e56a5f",
-  ok: "#6fdc8c",
-  ghost: "#cfe3ff",
+  shadow: "#0a1d14",
 };
 
 export class Pildora implements Design {
@@ -90,79 +95,77 @@ export class Pildora implements Design {
 
   draw(g: CanvasRenderingContext2D, now: number) {
     g.clearRect(0, 0, W, H);
-    this.drawPill(g);
+    g.drawImage(layer("pildora:fondo", W, H, (b) => this.drawPill(b)), 0, 0);
 
     const snap = this.snap;
     const plan = snap?.plan;
     const settings = this.ctx?.settings;
     const shows = settings?.bankShows ?? "left";
-    const statusWord = STATUS_TEXT[plan?.status ?? "loading"]?.[0] || "...";
+    const shadow = { shadow: C.shadow };
+    let x = 6;
 
     // Banca de 5 h
     const urgency = bankUrgency(plan?.fiveHour);
     const bankPalette = (["bank", "bankWarn", "bankBad"] as const)[urgency];
-    drawChip(g, chipSprites(bankPalette, "mini"), 4, 5, this.flipScale("bank", now));
+    drawChip(g, chipSprites(bankPalette, "mini"), x, CHIP_Y, this.flipScale("bank", now));
+    x += 11 + 4;
     const bank = bankValue(plan?.fiveHour, shows);
-    const valueColor = (u: 0 | 1 | 2) => [C.cream, C.warn, C.bad][u];
+    const tone = (u: 0 | 1 | 2) => [C.cream, C.warn, C.bad][u];
     if (bank === null) {
-      drawText(g, statusWord, 15, TEXT_Y, C.warn);
+      const word = STATUS_TEXT[plan?.status ?? "loading"]?.[0] || "...";
+      drawText(g, word, x, SMALL_Y, C.warn, shadow);
+      x += textWidth(word) + 5;
     } else {
-      drawText(g, `${bank}%`, 15, TEXT_Y, valueColor(urgency));
+      const value = `${bank}%`;
+      drawText(g, value, x, BIG_Y, tone(urgency), { font: "big", ...shadow });
+      x += textWidth(value, "big") + 3;
       const reset = formatReset(plan?.fiveHour?.resetsAt);
-      if (reset) drawText(g, `@${reset}`, 33, TEXT_Y, C.dim);
+      if (reset) {
+        drawText(g, `@${reset}`, x, SMALL_Y, C.dim, shadow);
+        x += textWidth(`@${reset}`) + 5;
+      } else x += 2;
     }
-    this.separator(g, 57);
+    x = this.separator(g, x);
 
     // Semana
-    drawText(g, "SEM", 62, TEXT_Y, C.dim);
+    drawText(g, "SEM", x, SMALL_Y, C.dim, shadow);
+    x += textWidth("SEM") + 3;
     const week = bankValue(plan?.sevenDay, shows);
-    drawText(g, week === null ? "..." : `${week}%`, 76, TEXT_Y, valueColor(bankUrgency(plan?.sevenDay)));
-    this.separator(g, 94);
+    const weekText = week === null ? "..." : `${week}%`;
+    drawText(g, weekText, x, SMALL_Y, week === null ? C.warn : tone(bankUrgency(plan?.sevenDay)), shadow);
+    x += textWidth(weekText) + 5;
+    x = this.separator(g, x);
 
     // Dinero del periodo, con la ficha de mayor valor que tenga
     const counts = chipsFor(this.costTo);
     let top = -1;
     counts.forEach((n, i) => n > 0 && (top = i));
     const palette: PaletteName = top >= 0 ? DENOMS[top].palette : "white";
-    drawChip(g, chipSprites(palette, "mini"), 99, 5, this.flipScale("money", now));
-    drawText(g, settings ? formatMoney(this.shownCost, settings) : "", 110, TEXT_Y, C.gold);
+    drawChip(g, chipSprites(palette, "mini"), x, CHIP_Y, this.flipScale("money", now));
+    x += 11 + 4;
+    const money = settings ? formatMoney(this.shownCost, settings) : "";
+    drawText(g, money, x, BIG_Y, C.gold, { font: "big", ...shadow });
 
-    // Fantasma y luz de estado
-    if (snap?.ghost) this.drawGhost(g, 142, 5);
-    const status = plan?.status;
-    const dot = status === "ok" ? C.ok : status === "loading" || !status ? C.dim : status === "rate_limited" ? C.warn : C.bad;
-    g.fillStyle = C.ink;
-    g.fillRect(149, 6, 5, 5);
-    g.fillStyle = dot;
-    g.fillRect(150, 7, 3, 3);
+    // Fantasma y piloto de estado
+    if (snap?.ghost) drawGhost(g, LED_X - 8, 6);
+    drawLed(g, LED_X, 6, plan?.status, C.ink);
   }
 
   private drawPill(g: CanvasRenderingContext2D) {
-    const rect = (x: number, y: number, w: number, h: number, c: string) => {
-      g.fillStyle = c;
-      g.fillRect(x, y, w, h);
-    };
-    // Extremos redondeados en escalón
-    const pill = (inset: number, c: string) => {
-      const x0 = inset, y0 = inset, w = W - inset * 2, h = H - inset * 2;
-      rect(x0 + 3, y0, w - 6, h, c);
-      rect(x0 + 1, y0 + 1, w - 2, h - 2, c);
-      rect(x0, y0 + 3, w, h - 6, c);
-    };
-    pill(0, C.ink);
-    pill(1, C.trim);
-    pill(2, C.felt);
-    rect(4, 3, W - 8, 1, C.feltLight);
+    rounded(g, 0, 0, W, H, C.ink, 3);
+    rounded(g, 1, 1, W - 2, H - 2, BRASS.base, 3);
+    rect(g, 4, 1, W - 8, 1, BRASS.shine);
+    rect(g, 4, H - 2, W - 8, 1, BRASS.dark);
+    rounded(g, 2, 2, W - 4, H - 4, C.ink, 2);
+    rounded(g, 3, 3, W - 6, H - 6, C.felt, 2);
+    rect(g, 5, 3, W - 10, 1, C.feltLight);
+    rect(g, 5, H - 4, W - 10, 1, C.feltDark);
   }
 
+  /** Separador punteado; devuelve la x donde sigue el texto. */
   private separator(g: CanvasRenderingContext2D, x: number) {
     g.fillStyle = C.sep;
-    for (let y = 4; y < H - 4; y += 2) g.fillRect(x, y, 1, 1);
-  }
-
-  private drawGhost(g: CanvasRenderingContext2D, x: number, y: number) {
-    const rows = [".###.", "#####", "#.#.#", "#####", "#.#.#"];
-    g.fillStyle = C.ghost;
-    rows.forEach((row, r) => [...row].forEach((ch, c) => ch === "#" && g.fillRect(x + c, y + r, 1, 1)));
+    for (let y = 5; y < H - 5; y += 2) g.fillRect(x, y, 1, 1);
+    return x + 5;
   }
 }

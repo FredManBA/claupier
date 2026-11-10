@@ -7,7 +7,7 @@ import type { Cue } from "../designs/design";
 import type { Settings } from "./types";
 
 /** Separación mínima entre dos sonidos iguales, para que no se amontonen. */
-const MIN_GAP_MS: Record<Cue, number> = { chip: 45, reel: 35, lever: 300, ball: 70, rake: 250 };
+const MIN_GAP_MS: Record<Cue, number> = { chip: 45, reel: 35, lever: 300, ball: 70, bag: 300 };
 
 /** [frecuencia Hz, ganancia relativa, caída en s] de cada resonancia. */
 type Mode = [number, number, number];
@@ -115,15 +115,16 @@ export class SoundEngine {
       case "ball":
         this.modal(t, [[1320 * jitter, 1, 0.02], [2050 * jitter, 0.4, 0.012]], 0.18);
         break;
-      case "rake":
-        this.noiseSweep(t, 0.18, 400, 1300, 0.14);
+      case "bag":
+        // «Cha-ching»: tres monedas seguidas que caen en la bolsa.
+        [0, 0.06, 0.12].forEach((dt, i) => this.coin(t + dt, COIN_BASE_HZ * [0.92, 1, 0.86][i] * jitter, 1 - i * 0.2));
         break;
     }
   }
 
-  private coin(t: number, base: number) {
-    this.modal(t, COIN.map(([ratio, gain, decay]): Mode => [base * ratio, gain, decay]), 0.32);
-    this.noiseHit(t, 0.005, 3000, 0.8, 0.12); // contacto
+  private coin(t: number, base: number, level = 1) {
+    this.modal(t, COIN.map(([ratio, gain, decay]): Mode => [base * ratio, gain, decay]), 0.32 * level);
+    this.noiseHit(t, 0.005, 3000, 0.8, 0.12 * level); // contacto
   }
 
   /** Varias resonancias senoidales con caída exponencial muy corta. */
@@ -172,24 +173,6 @@ export class SoundEngine {
     env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(band).connect(env).connect(this.out!);
     src.start(t, Math.random() * 0.2);
-    src.stop(t + dur + 0.02);
-  }
-
-  private noiseSweep(t: number, dur: number, from: number, to: number, gain: number) {
-    const ctx = this.ctx!;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    const band = ctx.createBiquadFilter();
-    band.type = "bandpass";
-    band.Q.value = 0.9;
-    band.frequency.setValueAtTime(from, t);
-    band.frequency.exponentialRampToValueAtTime(to, t + dur);
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(gain, t + dur * 0.4);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(band).connect(env).connect(this.out!);
-    src.start(t);
     src.stop(t + dur + 0.02);
   }
 }

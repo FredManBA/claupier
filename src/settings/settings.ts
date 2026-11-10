@@ -3,6 +3,8 @@
 
 import "./settings.css";
 import { advanceDemo, createBridge, demoSnapshot, type Bridge } from "../core/bridge";
+import { chipSprites } from "../core/chips";
+import { hash } from "../core/paint";
 import { SoundEngine } from "../core/sound";
 import type { DeepPartial, Settings, Snapshot } from "../core/types";
 import { DesignView } from "../core/view";
@@ -34,7 +36,19 @@ type Field =
       toUi?: (v: number) => number;
       fromUi?: (v: number) => number;
     }
-  | { kind: "number"; path: Path; label: string; help?: string; min: number; max: number; step: number; unit: string; showIf?: (s: Settings) => boolean }
+  | {
+      kind: "number";
+      path: Path;
+      label: string;
+      help?: string;
+      min: number;
+      max: number;
+      step: number;
+      unit: string;
+      showIf?: (s: Settings) => boolean;
+      /** Interruptor del que depende: se ve debajo de él y se apaga con él. */
+      under?: Path;
+    }
   | { kind: "hotkey"; path: Path; label: string }
   | { kind: "anchor"; path: Path; label: string; help?: string }
   | { kind: "action"; label: string; button: string; help?: string; run: () => Promise<void> | void }
@@ -44,6 +58,8 @@ interface Section {
   id: string;
   title: string;
   lead: string;
+  /** Icono de 9×7 en pixel art («#» = píxel). */
+  icon: string[];
   fields: Field[];
 }
 
@@ -55,12 +71,14 @@ const SECTIONS: Section[] = [
   {
     id: "diseno",
     title: "Diseño",
+    icon: ["..#####..", ".#.....#.", "#..###..#", "#.#...#.#", "#..###..#", ".#.....#.", "..#####.."],
     lead: "Elige cómo se ve Claupier. Las vistas previas usan datos de ejemplo.",
     fields: [{ kind: "designs" }],
   },
   {
     id: "ventana",
     title: "Ventana",
+    icon: ["#########", "#########", "#.......#", "#.......#", "#.......#", "#.......#", "#########"],
     lead: "Tamaño, transparencia y lugar de la mesa en la pantalla.",
     fields: [
       { kind: "choice", path: "scale", label: "Tamaño", options: [[2, "2×"], [3, "3×"], [4, "4×"]] },
@@ -94,6 +112,7 @@ const SECTIONS: Section[] = [
   {
     id: "inicio",
     title: "Inicio",
+    icon: ["....#....", "..#.#.#..", ".#..#..#.", "#...#...#", "#.......#", ".#.....#.", "..#####.."],
     lead: "Qué hace Claupier al arrancar.",
     fields: [
       { kind: "switch", path: "autostart", label: "Arrancar con Windows" },
@@ -104,6 +123,7 @@ const SECTIONS: Section[] = [
   {
     id: "atajos",
     title: "Atajos",
+    icon: ["#########", "#.......#", "#.#.#.#.#", "#.......#", "#.#####.#", "#.......#", "#########"],
     lead: "Pulsa un botón y luego la combinación nueva. Esc cancela.",
     fields: [
       { kind: "hotkey", path: "hotkeyToggle", label: "Mostrar u ocultar" },
@@ -113,14 +133,24 @@ const SECTIONS: Section[] = [
   {
     id: "avisos",
     title: "Avisos",
+    icon: ["....#....", "..#####..", ".#######.", ".#######.", ".#######.", "#########", "....#...."],
     lead: "Notificaciones de Windows. Cada una suena una sola vez por ventana o periodo.",
     fields: [
       { kind: "switch", path: "alerts.fiveHour", label: "Banca de 5 h baja" },
-      { kind: "number", path: "alerts.fiveHourBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%" },
+      { kind: "number", path: "alerts.fiveHourBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%", under: "alerts.fiveHour" },
       { kind: "switch", path: "alerts.week", label: "Banca semanal baja" },
-      { kind: "number", path: "alerts.weekBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%" },
+      { kind: "number", path: "alerts.weekBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%", under: "alerts.week" },
       { kind: "switch", path: "alerts.spend", label: "Tope de gasto", help: "Del periodo elegido en Datos, en dólares." },
-      { kind: "number", path: "alerts.spendOverUsd", label: "Avisar sobre", min: 1, max: 100000, step: 1, unit: "USD" },
+      {
+        kind: "number",
+        path: "alerts.spendOverUsd",
+        label: "Avisar sobre",
+        min: 1,
+        max: 100000,
+        step: 1,
+        unit: "USD",
+        under: "alerts.spend",
+      },
       { kind: "switch", path: "alerts.expired", label: "Sesión caducada" },
       { kind: "action", label: "Probar", button: "Enviar aviso de prueba", run: () => bridge.testAlert() },
     ],
@@ -128,6 +158,7 @@ const SECTIONS: Section[] = [
   {
     id: "datos",
     title: "Datos",
+    icon: [".......#.", ".......#.", "....#..#.", "....#..#.", ".#..#..#.", ".#..#..#.", "#########"],
     lead: "Qué cuenta la banca, qué periodo muestran las fichas y en qué moneda.",
     fields: [
       { kind: "choice", path: "bankShows", label: "La banca muestra", options: [["left", "Lo que queda"], ["used", "Lo usado"]] },
@@ -163,6 +194,7 @@ const SECTIONS: Section[] = [
   {
     id: "sonido",
     title: "Sonido",
+    icon: ["...#.....", "..##..#..", "####...#.", "####.#.#.", "####...#.", "..##..#..", "...#....."],
     lead: "Sonidos suaves generados en el momento, sin agudos. Vienen apagados.",
     fields: [
       { kind: "switch", path: "sound.enabled", label: "Activar sonido" },
@@ -183,7 +215,7 @@ const SECTIONS: Section[] = [
         label: "Silenciar en juego",
         help: "Con una app en pantalla completa o con Windows en No molestar.",
       },
-      { kind: "action", label: "Probar", button: "Escuchar fichas", run: () => playChips() },
+      { kind: "action", label: "Probar", button: "Escuchar el sonido", run: () => playChips() },
     ],
   },
 ];
@@ -215,8 +247,8 @@ const statusEl = document.querySelector<HTMLElement>("#status")!;
 let statusTimer: number | undefined;
 
 function setStatus(text: string, kind: "" | "saved" | "error" = "") {
-  statusEl.textContent = text;
-  statusEl.className = `status ${kind}`;
+  if (text) statusEl.textContent = text;
+  statusEl.className = `status ${kind}${text ? " visible" : ""}`;
   window.clearTimeout(statusTimer);
   if (kind === "saved") statusTimer = window.setTimeout(() => setStatus(""), 1800);
 }
@@ -250,12 +282,13 @@ function refreshAll() {
   refreshers.forEach((r) => r());
 }
 
-function fieldRow(label: string, control: HTMLElement, help?: string, id?: string) {
+/** `target` es el control que nombra la etiqueta, si va dentro de un envoltorio. */
+function fieldRow(label: string, control: HTMLElement, help?: string, id?: string, target: HTMLElement = control) {
   const row = el("div", { className: "field" });
   const lab = el("label", { textContent: label });
   if (id) {
     lab.htmlFor = id;
-    control.id = id;
+    target.id = id;
   }
   row.append(lab, control);
   if (help) row.append(el("p", { className: "help", textContent: help }));
@@ -301,12 +334,15 @@ function renderField(f: Field): HTMLElement {
       const wrap = el("span", { className: "range" }, input, out);
       input.addEventListener("input", () => (out.textContent = show(Number(input.value))));
       input.addEventListener("change", () => void save(f.path, fromUi(Number(input.value))));
+      const fill = () => input.style.setProperty("--fill", `${((Number(input.value) - f.min) / (f.max - f.min)) * 100}%`);
+      input.addEventListener("input", fill);
       refreshers.push(() => {
         const v = toUi(Number(get(f.path)));
         input.value = String(v);
         out.textContent = show(v);
+        fill();
       });
-      return fieldRow(f.label, wrap, f.help, id);
+      return fieldRow(f.label, wrap, f.help, id, input);
     }
     case "number": {
       const input = el("input", { type: "number", min: String(f.min), max: String(f.max), step: String(f.step) });
@@ -315,10 +351,14 @@ function renderField(f: Field): HTMLElement {
         const v = Number(input.value);
         if (Number.isFinite(v)) void save(f.path, Math.min(f.max, Math.max(f.min, v)));
       });
-      const row = fieldRow(f.label, wrap, f.help, id);
+      const row = fieldRow(f.label, wrap, f.help, id, input);
+      if (f.under) row.classList.add("sub");
       refreshers.push(() => {
         if (document.activeElement !== input) input.value = String(get(f.path));
         row.hidden = f.showIf ? !f.showIf(settings) : false;
+        const off = f.under ? !get(f.under) : false;
+        row.classList.toggle("off", off);
+        input.disabled = off;
       });
       return row;
     }
@@ -407,41 +447,99 @@ function keyName(e: KeyboardEvent): string | null {
 
 // ── Diseños con vista previa ───────────────────────────────────────────────
 
+/** Tamaño del escenario de cada tarjeta, en píxeles CSS. La píldora va a lo ancho. */
+const STAGE = { w: 232, h: 336 };
+const STAGE_WIDE = { w: 380, h: 84 };
+
 function renderDesigns(): HTMLElement {
   const grid = el("div", { className: "designs" });
   grid.setAttribute("role", "radiogroup");
   grid.setAttribute("aria-label", "Diseño");
   const snap: Snapshot = demoSnapshot();
   const views: DesignView[] = [];
+  const dpr = window.devicePixelRatio || 1;
 
-  for (const info of DESIGN_LIST) {
-    const card = el("button", { className: "design-card", type: "button", disabled: !info.ready });
+  // La píldora, que es una tira, va primero y a lo ancho; las demás, en columnas.
+  const ordered = [...DESIGN_LIST].sort((a, b) => Number(b.id === "pildora") - Number(a.id === "pildora"));
+  for (const info of ordered) {
+    const wide = info.id === "pildora";
+    const card = el("button", { className: `design-card${wide ? " wide" : ""}`, type: "button", disabled: !info.ready });
     card.setAttribute("role", "radio");
     const stage = el("div", { className: "stage" });
     if (info.ready) {
       const canvas = el("canvas");
       stage.append(canvas);
       const design = info.create();
-      // Escala entera más grande que quepa en la tarjeta (unos 250×320 px).
-      const scale = Math.max(1, Math.min(4, Math.floor(Math.min(250 / design.width, 320 / design.height))));
-      views.push(new DesignView(canvas, design, scale));
+      // La escala entera más grande que quepa, en píxeles físicos, para que se vea nítido.
+      const box = wide ? STAGE_WIDE : STAGE;
+      const k = Math.max(1, Math.floor(Math.min(box.w / design.width, box.h / design.height) * dpr));
+      views.push(new DesignView(canvas, design, k / dpr));
     } else {
       stage.append(el("span", { className: "soon", textContent: "Pronto" }));
     }
-    card.append(stage, el("strong", { textContent: info.name }), el("span", { textContent: info.description }));
+    card.append(
+      stage,
+      el("div", { className: "head" }, el("strong", { textContent: info.name }), el("em", { className: "badge", textContent: "En uso" })),
+      el("span", { textContent: info.description }),
+    );
     card.addEventListener("click", () => void save("design", info.id));
     refreshers.push(() => card.setAttribute("aria-checked", String(settings.design === info.id)));
     grid.append(card);
   }
 
+  // Igual que la mesa: si Windows pide reducir el movimiento, la animación completa pasa a reducida.
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const motion = () => (settings.motion === "full" && reduce.matches ? "reduced" : settings.motion);
   const feed = (first: boolean) =>
-    views.forEach((v) => v.feed(structuredClone(snap), { settings, motion: settings.motion, cue: () => {} }, first));
+    views.forEach((v) => v.feed(structuredClone(snap), { settings, motion: motion(), cue: () => {} }, first));
+  reduce.addEventListener("change", () => feed(true));
   refreshers.push(() => feed(true));
   window.setInterval(() => {
     advanceDemo(snap);
     feed(false);
   }, 3000);
   return grid;
+}
+
+/** Icono pixel en SVG; toma el color del texto. */
+function pixelIcon(map: string[]): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${map[0].length} ${map.length}`);
+  svg.setAttribute("aria-hidden", "true");
+  let d = "";
+  map.forEach((row, y) => [...row].forEach((ch, x) => ch === "#" && (d += `M${x} ${y}h1v1H${x}z`)));
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", d);
+  svg.append(path);
+  return svg;
+}
+
+/** Fibras del paño, como las de la mesa, en una tesela de 64 px. */
+function feltTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  for (let y = 0; y < 64; y++) {
+    for (let x = 0; x < 64; x++) {
+      const n = hash(x, y);
+      if (n >= 0.05 && n <= 0.93) continue;
+      g.fillStyle = n < 0.05 ? "#21503b" : "#153a2a";
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  document.body.style.setProperty("--felt-texture", `url(${c.toDataURL()})`);
+}
+
+/** La ficha naranja de $500 junto al nombre, a 2×. */
+function drawBrandChip() {
+  const canvas = document.querySelector<HTMLCanvasElement>("#brand-chip");
+  const g = canvas?.getContext("2d");
+  if (!canvas || !g) return;
+  const sprite = chipSprites("orange").face;
+  canvas.width = sprite.width;
+  canvas.height = sprite.height;
+  g.drawImage(sprite, 0, 0);
 }
 
 // ── Arranque ───────────────────────────────────────────────────────────────
@@ -457,7 +555,7 @@ async function start() {
   const nav = document.querySelector<HTMLElement>("#nav")!;
   const content = document.querySelector<HTMLElement>("#content")!;
   const panels = SECTIONS.map((section, i) => {
-    const tab = el("button", { type: "button", textContent: section.title, id: `tab-${section.id}` });
+    const tab = el("button", { type: "button", id: `tab-${section.id}` }, pixelIcon(section.icon), section.title);
     tab.setAttribute("role", "tab");
     tab.setAttribute("aria-controls", `panel-${section.id}`);
     const panel = el("section", { id: `panel-${section.id}`, hidden: i !== 0 });
@@ -491,6 +589,8 @@ async function start() {
   });
 
   document.querySelector("#close")!.addEventListener("click", () => void bridge.hideWindow());
+  drawBrandChip();
+  feltTexture();
   select(0);
   refreshAll();
 }

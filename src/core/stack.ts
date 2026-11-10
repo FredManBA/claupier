@@ -1,6 +1,7 @@
-// Pilas de fichas animadas, compartidas por los diseños.
+// Pilas de fichas animadas (mesa) y el cambio de dinero a fichas.
 
-import { CHIP_DIMS, type ChipSize, type PaletteName, chipSprites, drawChip, slot } from "./pixel";
+import { CHIP_DIMS, type ChipSize, type PaletteName, chipSprites, drawChip } from "./chips";
+import { shadow } from "./paint";
 import type { Motion } from "./types";
 
 export const DENOMS: { value: number; palette: PaletteName; label: string }[] = [
@@ -24,11 +25,11 @@ export function chipsFor(costUsd: number): number[] {
     .reverse();
 }
 
-const DROP_MS = 260;
-const BOUNCE_MS = 90;
-const POP_MS = 260;
+const DROP_MS = 240;
+const SETTLE_MS = 110;
+const POP_MS = 240;
 const FADE_MS = 200;
-export const FLIP_MS = 520;
+const FLIP_MS = 520;
 
 interface Chip {
   state: "drop" | "fade" | "rest" | "pop";
@@ -47,7 +48,6 @@ export class Stack {
     public base: number,
     public palette: PaletteName,
     public maxVisible: number,
-    public slotColor = "#143a2a",
     public size: ChipSize = "big",
   ) {}
 
@@ -57,7 +57,7 @@ export class Stack {
   }
 
   /**
-   * - `full`: las fichas caen y rebotan, y las que se van suben y se desvanecen.
+   * - `full`: las fichas caen y se asientan; las que se van suben y se desvanecen.
    * - `reduced`: aparecen y desaparecen en su sitio, sin moverse.
    * - `off`: cambian al instante.
    */
@@ -71,13 +71,13 @@ export class Stack {
     if (n > current) {
       for (let i = current; i < n; i++) {
         const visible = i < this.maxVisible;
-        const delay = visible ? (i - current) * 90 : 0;
+        const delay = visible ? (i - current) * 80 : 0;
         const state = !visible ? "rest" : motion === "full" ? "drop" : "fade";
         this.chips.push({ state, start: now + delay });
       }
     } else if (n < current) {
       for (let i = current - 1, j = 0; i >= n; i--, j++) {
-        this.chips[i] = { state: "pop", start: now + Math.min(j, 6) * 70 };
+        this.chips[i] = { state: "pop", start: now + Math.min(j, 6) * 60 };
       }
     }
   }
@@ -91,7 +91,7 @@ export class Stack {
           c.landed = true;
           this.onLand?.();
         }
-        if (now - c.start >= DROP_MS + BOUNCE_MS) c.state = "rest";
+        if (now - c.start >= DROP_MS + SETTLE_MS) c.state = "rest";
         else busy = true;
       } else if (c.state === "fade") {
         if (now - c.start >= FADE_MS) c.state = "rest";
@@ -119,11 +119,14 @@ export class Stack {
     return this.base - d.h - i * d.step;
   }
 
-  draw(ctx: CanvasRenderingContext2D, now: number, palette: PaletteName = this.palette) {
-    if (this.size === "big") ctx.drawImage(slot(this.slotColor), this.x, this.base - 6);
+  draw(g: CanvasRenderingContext2D, now: number, palette: PaletteName = this.palette) {
+    const d = CHIP_DIMS[this.size];
     const sprites = chipSprites(palette, this.size);
-    const fall = this.size === "big" ? 30 : 14;
     const visible = this.chips.slice(0, this.maxVisible);
+    if (visible.some((c) => c.state === "rest" || now >= c.start)) {
+      shadow(g, this.x + d.w / 2 + 1, this.base - 2, d.w + 2, 5, 0.3);
+    }
+    const fall = this.size === "big" ? 26 : 12;
     visible.forEach((c, i) => {
       if ((c.state === "drop" || c.state === "fade") && now < c.start) return; // aún no entra
       let y = this.chipY(i);
@@ -131,23 +134,24 @@ export class Stack {
       let scaleX = 1;
       if (c.state === "drop") {
         const t = (now - c.start) / DROP_MS;
+        // Cae con gravedad y, al tocar, se hunde 1 px y vuelve.
         if (t < 1) y -= Math.round((1 - t * t) * fall);
-        else y -= 1; // pequeño rebote al aterrizar
+        else if (now - c.start < DROP_MS + SETTLE_MS / 2) y += 1;
       } else if (c.state === "fade") {
         const t = (now - c.start) / FADE_MS;
         alpha = t < 0.34 ? 0.3 : t < 0.67 ? 0.6 : 1;
       } else if (c.state === "pop" && now >= c.start) {
         const t = Math.min(1, (now - c.start) / POP_MS);
-        y -= Math.round(t * 6);
+        y -= Math.round(t * 5);
         alpha = t < 0.34 ? 1 : t < 0.67 ? 0.6 : 0.3;
       }
       if (c.flipStart !== undefined) {
         const t = Math.min(1, (now - c.flipStart) / FLIP_MS);
         scaleX = Math.abs(Math.cos(t * Math.PI));
       }
-      ctx.globalAlpha = alpha;
-      drawChip(ctx, sprites, this.x, y, scaleX);
-      ctx.globalAlpha = 1;
+      g.globalAlpha = alpha;
+      drawChip(g, sprites, this.x, y, scaleX);
+      g.globalAlpha = 1;
     });
   }
 }
