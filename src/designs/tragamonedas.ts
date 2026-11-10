@@ -2,10 +2,8 @@
 // Cuando un valor cambia, la palanca baja y su rodillo gira hasta el nuevo.
 // El gasto cae por la ranura central a la bandeja, cambiado en monedas de
 // colores ($1 a $500, como las fichas). Si el cambio junta varias monedas en
-// una de más valor, las que sobran se desvanecen y cae la nueva.
-//
-// PRUEBA PENDIENTE DE VALIDAR: `?coins=chips` muestra la misma bandeja con las
-// fichas de casino en pilas, para que Fredman elija entre las dos.
+// una de más valor, las que sobran se desvanecen y cae la nueva. Las de más
+// valor quedan arriba del montón, que es lo que se ve.
 
 import {
   PERIOD_LABEL,
@@ -21,7 +19,7 @@ import { type CoinPalette, type CoinSpot, SPIN, coinSprite, layoutHeap } from ".
 import { drawText, textWidth } from "../core/font";
 import { lerp } from "../core/anim";
 import { BRASS, LED, LOGO_GRADIENT, drawGhost, layer, ledKind, rect, rounded } from "../core/paint";
-import { DENOMS, Stack, chipsFor } from "../core/stack";
+import { DENOMS, chipsFor } from "../core/stack";
 import type { PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
@@ -87,12 +85,9 @@ const MAX_COINS = 36;
 /** Más monedas que esto en cola: las primeras entran sin animación. */
 const MAX_QUEUE = 16;
 
-const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR + 1, HEAP_W / 2, "big").map((s) => ({ ...s, x: s.x + HEAP_X }));
+// El montón se apoya justo sobre el labio de la bandeja, para que no lo tape.
+const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR - 1, HEAP_W / 2, "big").map((s) => ({ ...s, x: s.x + HEAP_X }));
 const COIN_COLORS = DENOMS.map((d) => d.palette as CoinPalette);
-
-/** Pilas de fichas de la variante `?coins=chips`, una por valor. */
-const CHIP_STACK_X = (i: number) => TRAY.x + 2 + i * 18;
-const CHIP_MAX_VISIBLE = 8;
 
 interface Reel {
   value: string;
@@ -147,14 +142,6 @@ export class Tragamonedas implements Design {
   private fading: FadingCoin[] = [];
   private nextDrop = 0;
 
-  // Variante de prueba con fichas
-  private readonly useChips = new URLSearchParams(location.search).get("coins") === "chips";
-  private stacks = DENOMS.map((d, i) => new Stack(CHIP_STACK_X(i), FLOOR + 1, d.palette, CHIP_MAX_VISIBLE));
-
-  constructor() {
-    for (const st of this.stacks) st.onLand = () => this.ctx?.cue("coin");
-  }
-
   setSnapshot(snap: Snapshot, ctx: DesignContext, now: number, first: boolean) {
     this.ctx = ctx;
     const s = ctx.settings;
@@ -187,12 +174,7 @@ export class Tragamonedas implements Design {
       ctx.cue("lever");
     }
 
-    const target = chipsFor(cost);
-    if (this.useChips) {
-      target.forEach((n, i) => this.stacks[i].setTarget(n, now, first ? "instant" : ctx.motion));
-    } else {
-      this.setCoins(target, animate, now);
-    }
+    this.setCoins(chipsFor(cost), animate, now);
     this.snap = snap;
   }
 
@@ -213,12 +195,13 @@ export class Tragamonedas implements Design {
 
   /**
    * Lleva la bandeja al cambio nuevo. Sin animación, el montón se arma de una
-   * vez (las de más valor abajo). Con animación, las que sobran se desvanecen
-   * y las que faltan caen por la ranura, de la más cara a la más barata.
+   * vez, con las de más valor arriba. Con animación, las que sobran se
+   * desvanecen y las que faltan caen por la ranura, de la más barata a la más
+   * cara (así las caras quedan encima).
    */
   private setCoins(target: number[], animate: boolean, now: number) {
     if (!animate) {
-      this.heap = target.flatMap((n, d) => Array.from({ length: n }, () => d)).reverse();
+      this.heap = target.flatMap((n, d) => Array.from({ length: n }, () => d));
       this.queue = [];
       this.flying = [];
       this.fading = [];
@@ -248,7 +231,7 @@ export class Tragamonedas implements Design {
         }
       }
     }
-    for (let d = DENOMS.length - 1; d >= 0; d--) {
+    for (let d = 0; d < DENOMS.length; d++) {
       for (let k = 0; k < target[d] - current[d]; k++) this.queue.push(d);
     }
     // Demasiadas: las primeras se colocan ya y caen solo las últimas.
@@ -280,10 +263,6 @@ export class Tragamonedas implements Design {
     if (this.leverStart !== undefined) {
       if (now - this.leverStart >= LEVER_MS) this.leverStart = undefined;
       else busy = true;
-    }
-
-    if (this.useChips) {
-      for (const st of this.stacks) if (st.update(now)) busy = true;
     }
 
     // Monedas que tocan el montón
@@ -345,12 +324,11 @@ export class Tragamonedas implements Design {
     });
 
     this.drawLever(g, now);
-    if (this.useChips) this.drawChipStacks(g, now);
-    else this.drawTrayContents(g, now);
+    this.drawTrayContents(g, now);
     g.drawImage(layer("traga:labio", W, H, (b) => this.drawTrayLip(b)), 0, 0);
     // Si hay más monedas de las que caben, se cuentan las que no se ven.
     const hidden = this.heap.length - SPOTS.length;
-    if (!this.useChips && hidden > 0) {
+    if (hidden > 0) {
       const label = `+${Math.min(999, hidden)}`;
       drawText(g, label, TRAY.x + TRAY.w - 5 - textWidth(label), TRAY.y + 5, C.gold, { outline: C.ink });
     }
@@ -543,19 +521,6 @@ export class Tragamonedas implements Design {
     const frame = SPIN[Math.floor((now - coin.start) / 55) % SPIN.length];
     const sprite = coinSprite(frame, color, "big");
     g.drawImage(sprite, Math.round(x + (12 - sprite.width) / 2), Math.round(y));
-  }
-
-  /** Variante de prueba: las fichas de casino en pilas, una por valor. */
-  private drawChipStacks(g: CanvasRenderingContext2D, now: number) {
-    this.stacks.forEach((st) => {
-      const extra = st.count - st.maxVisible;
-      if (extra > 0) {
-        const label = extra > 999 ? "+999" : `+${extra}`;
-        const y = st.chipY(st.maxVisible - 1) - 7;
-        drawText(g, label, st.x + 9 - Math.floor(textWidth(label) / 2), y, C.gold, { outline: C.ink });
-      }
-      st.draw(g, now);
-    });
   }
 
 }
