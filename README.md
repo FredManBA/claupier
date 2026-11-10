@@ -1,82 +1,120 @@
 # Claupier
 
-Muestra el uso de Claude en pixel art, con temática de casino. Es una ventana pequeña que se queda encima de las demás y se muestra u oculta con una tecla, por ejemplo para jugar mientras trabajas.
+**Your Claude Code usage as a tiny pixel art casino table.** Claupier is a small window that stays on top of your games and apps and shows how much of your Claude plan you have left and how much your tokens would cost at API prices. Show or hide it with a hotkey, without leaving what you are doing.
 
-## Diseños
+[Leer en español](README.es.md)
 
-Se eligen en **Ajustes → Diseño**, que tiene vista previa animada.
+<p>
+  <img src="docs/screenshots/mesa.png" alt="The Mesa design: casino table with your 5-hour bank in blue chips and today's spend in the pot" height="300">
+  <img src="docs/screenshots/tragamonedas.png" alt="The Tragamonedas design: slot machine with three reels and a pile of coins" height="300">
+  <img src="docs/screenshots/pachinko.png" alt="The Pachinko design: balls that fall into pockets by value" height="300">
+</p>
+<p>
+  <img src="docs/screenshots/pildora.png" alt="The Píldora design: a single compact row" height="54">
+</p>
 
-| Diseño | Qué muestra |
+> Claupier is an independent, unofficial project. It is not affiliated with, endorsed by or sponsored by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic. The name is a pun on Claude and *croupier*, the casino dealer.
+
+The app is in Spanish; this README explains every label you will see.
+
+## Install
+
+**Requirements:** Windows 10 or 11 (64-bit) and [Claude Code](https://claude.com/claude-code) installed and signed in.
+
+1. Download `Claupier_x.y.z_x64-setup.exe` from the [latest release](https://github.com/FredManBA/claupier/releases/latest).
+2. Run it. It installs for your user only and does not need administrator rights. If WebView2 is missing (rare on Windows 11), the installer downloads it.
+3. The installer is not code-signed, so Windows SmartScreen may say *"Windows protected your PC"*. Click **More info → Run anyway**. You can check the source and build it yourself (see [Build from source](#build-from-source)).
+4. Open **Claupier** from the Start menu. The table appears in the middle of your screen (drag it wherever you like, or anchor it to a corner in the settings) and an icon appears in the system tray.
+
+To uninstall it, go to **Settings → Apps → Installed apps → Claupier**. Your settings stay in `%APPDATA%\com.needyfriends.claupier\`; delete that folder to remove them too.
+
+## How to use it
+
+| Action | What it does |
 |---|---|
-| **Mesa** | Arriba, el cartel con el nombre, el piloto del plan y lo que te queda de la semana. En el **pozo** está el gasto en fichas, cada una sobre su casilla impresa. Abajo está **tu banca** de 5 h; cuando baja, tus fichas se deslizan solas al pozo |
-| **Píldora** | Una sola fila mínima para dejar encima de un juego: banca de 5 h, semana y dinero |
-| **Tragamonedas** | Tres rodillos (5 h, semana y dinero) que giran al cambiar, con la palanca. Cada dólar gastado es una **moneda** que cae a la bandeja y se suma a un montón que solo crece; al llegar a **$100**, el montón se embolsa y la bolsa pasa a la pila de la derecha |
-| **Pachinko** | La tolva guarda lo que te queda de las 5 h. Las **bolas** caen entre los clavos y se quedan en la casilla de su valor. El tubo de la derecha es la semana |
+| `Ctrl+Alt+F` | Show or hide the table without taking focus from your game |
+| `Ctrl+Alt+G` | Ghost mode: clicks go through the table |
+| Drag | Move the table (if it was anchored to a corner, it becomes free) |
+| Double-click | Refresh the plan now |
+| Right-click | Open the settings |
 
-La mesa y la píldora usan fichas:
+The tray icon has the same options, plus **Salir** (quit). You can change the hotkeys in **Ajustes → Atajos**.
 
-| Ficha | Valor |
+### What the labels mean
+
+| Label | Meaning |
 |---|---|
-| Blanca | $1 |
-| Roja | $5 |
-| Verde | $25 |
-| Negra | $100 |
-| **Naranja** | **$500** |
+| **5H** / **TU BANCA 5H** | Your 5-hour usage window: how much is left (or used, if you choose so) |
+| **SEM** / **SEMANA** | Your weekly limit |
+| **HOY** | Today |
+| **POZO** | The pot: what you spent in the chosen period |
+| **◷ 2h 17m**, **◷ 3d 4h** | Time until that limit resets (d = days, h = hours, m = minutes) |
+| **4.8M TOKENS** / **TOK** | Tokens used in the period |
+| **ESPERA** | Anthropic asked to wait (too many requests); Claupier retries by itself |
+| **SIN RED** | No connection |
+| **SIN SESIÓN**, **ABRE CLAUDE**, **CADUCÓ** | Claude Code is not signed in or the session expired: open Claude Code to renew it |
 
-En el pachinko, cada bola vale lo que dice su casilla ($1 a $500), con las etiquetas en el color de su ficha. En la tragamonedas, cada moneda vale $1 y cada bolsa, $100; si hay más de seis bolsas, se muestra cuántas son.
+The status light next to the name is grey while loading, green when the plan is up to date, orange while waiting and red when something is wrong.
 
-El dinero es **equivalente**: es lo que costarían esos tokens con los precios de la API. Con un plan Pro o Max no se paga por token. Las fichas, las bolas y las monedas siempre valen dólares, aunque el monto se muestre en colones.
+### The four designs
 
-## Atajos y ratón
+Pick one in **Ajustes → Diseño**, with a live preview.
 
-| Acción | Qué hace |
+| Design | What it shows |
 |---|---|
-| `Ctrl+Alt+F` | Muestra u oculta la mesa sin quitarle el foco al juego |
-| `Ctrl+Alt+G` | Modo fantasma: los clics atraviesan la mesa |
-| Arrastrar | Mueve la mesa (si estaba anclada a una esquina, pasa a posición libre) |
-| Doble clic | Actualiza el plan en ese momento |
-| Clic derecho | Abre los ajustes |
+| **Mesa** (table) | Your 5-hour bank as blue chips. When it drops, your chips slide into the pot. The pot holds your spend as casino chips |
+| **Píldora** (pill) | A single compact row to leave on top of a game |
+| **Tragamonedas** (slot machine) | Three reels: 5 hours, week and money. Each dollar is a coin; every $100 becomes a bag |
+| **Pachinko** | The hopper holds what is left of your 5 hours. Each ball lands in the pocket of its value. The tube on the right is the week |
 
-Los atajos se cambian en **Ajustes → Atajos**. La bandeja también tiene todas estas opciones.
+Chip values: white $1, red $5, green $25, black $100 and **orange $500**.
 
-## Ajustes
+### Settings
 
-- **Ventana:** tamaño 2×, 3× o 4×; opacidad; anclar a una esquina; siempre encima; animación completa, reducida o apagada.
-- **Inicio:** arrancar con Windows, empezar oculta y empezar en modo fantasma.
-- **Avisos:** notificaciones de Windows cuando la banca de 5 h o la semanal bajan del % que elijas, cuando se pasa un tope de gasto o cuando caduca la sesión. Cada aviso suena una sola vez por ventana o periodo.
-- **Datos:** la banca muestra lo que queda o lo usado; el gasto puede ser de hoy, de la ventana de 5 h o de la semana; cada cuánto se consulta el plan (mínimo 2 min); dólares o colones con un tipo de cambio que escribes tú.
-- **Sonido:** sonido de moneda sintetizado, sin archivos ni agudos y apagado por defecto; al embolsar $100 suenan tres monedas seguidas. Se puede silenciar solo durante el juego (una app en pantalla completa o Windows en No molestar).
+- **Ventana (window):** size 1× to 4×, **pixel or normal text** (normal uses the Windows font for easier reading; the logo stays pixel art), opacity, anchor to a corner, always on top and animation level.
+- **Inicio (startup):** start with Windows, start hidden, start in ghost mode.
+- **Atajos (hotkeys):** change both hotkeys.
+- **Avisos (alerts):** Windows notifications when the 5-hour or weekly bank drops below a percentage, when you pass a spending cap or when the session expires. Each alert fires once per window or period.
+- **Datos (data):** show what is left or what is used; spending for today, the 5-hour window or the week; how often to check the plan (2 minutes minimum); **dollars or any other currency**, with its symbol and the exchange rate you type in.
+- **Sonido (sound):** a soft synthesized coin sound, off by default, muted automatically while you play in full screen or with Do Not Disturb on.
 
-Los ajustes se guardan en `%APPDATA%\com.needyfriends.claupier\settings.json`.
+## How it works
 
-## De dónde salen los datos
+Claupier only reads data that is already on your computer, plus one request to Anthropic.
 
-1. **El plan:** se consulta el mismo servicio que usa `/usage` de Claude Code, con el token que Claude Code guarda en `~/.claude/.credentials.json`. El token se envía solo a `api.anthropic.com` y nunca se registra. Ese servicio no está documentado oficialmente; si responde 429, se espera cada vez más (hasta 15 minutos).
-2. **Los tokens y el gasto:** se leen de los registros locales de Claude Code (`~/.claude/projects/**/*.jsonl`) de los últimos 8 días. Solo se lee lo que se añadió desde la última vez.
+1. **Plan limits.** Every few minutes it asks `api.anthropic.com` for your plan usage, the same data the `/usage` command shows in Claude Code. It uses the sign-in token that Claude Code stores in `~/.claude/.credentials.json`. The token is only ever sent to `api.anthropic.com` over HTTPS, without following redirects, and it is never logged, saved elsewhere or shown. This endpoint is not officially documented, so it may change; if Anthropic answers "too many requests", Claupier waits longer each time (up to 15 minutes).
+2. **Tokens and spend.** It reads Claude Code's local logs (`~/.claude/projects/**/*.jsonl`) from the last 8 days, only the new lines each time. It respects `CLAUDE_CONFIG_DIR` if you set it.
+3. **Equivalent cost.** The money shown is what those tokens would cost with [Anthropic's API prices](src-tauri/src/pricing.rs). On a Pro or Max plan you do not pay per token: it is a way to see how much you use, not a bill. Chips, balls and coins always count dollars, even if you show the amount in another currency.
 
-Los precios están en `src-tauri/src/pricing.rs`.
+There is no telemetry, no account and no other network traffic. If you use Claude Code with an API key instead of a subscription, the plan section shows **SIN SESIÓN**, but the tokens and spend still work.
 
-## Desarrollo
+**Known limitation:** games in *exclusive* full screen can cover the table. In *borderless* full screen it shows fine.
 
-Necesita Node 24, Rust (MSVC) y WebView2.
+## Build from source
+
+You need [Node.js](https://nodejs.org) 24, [Rust](https://rustup.rs) with the MSVC toolchain, and WebView2.
 
 ```
+git clone https://github.com/FredManBA/claupier.git
+cd claupier
 npm install
-npm run tauri dev                       # la app con datos reales
-npm run dev                             # en el navegador, con datos simulados
-npm run tauri build -- --no-bundle      # ejecutable en src-tauri/target/release/claupier.exe
-cd src-tauri && cargo test              # pruebas de ajustes, avisos, precios y registros
+npm run tauri dev                       # the app with your real data
+npm run dev                             # in the browser, with simulated data
+npm run tauri build                     # installer in src-tauri/target/release/bundle/nsis/
+cd src-tauri && cargo test              # tests for settings, alerts, prices and logs
 ```
 
-En el navegador, `/` es la mesa, `/settings.html` son los ajustes y `/lab.html` muestra ampliados las fichas, las monedas, la bolsa, las bolas y las fuentes (solo en desarrollo). Parámetros: `?design=pildora|tragamonedas|pachinko`, `?still` (sin simulación), `?cost=1873.5`, `?used=93`, `?period=week`, `?currency=CRC`, `?bank=used`, `?ghost` y `?status=expired`.
+In the browser, `/` is the table, `/settings.html` the settings and `/lab.html` a zoomed view of the sprites and fonts. URL parameters for testing: `?design=pildora|tragamonedas|pachinko`, `?still` (no simulation), `?text=smooth`, `?currency=local&symbol=€&rate=0.92`, `?cost=1873.5`, `?used=93`, `?period=week`, `?bank=used`, `?ghost` and `?status=expired`.
 
-Estructura:
+Project layout:
 
-- `src-tauri/src/`: ajustes, registros, plan, avisos, silencio en juego y precios.
-- `src/core/`: fuentes pixel, fichas, monedas, bolas, materiales (paño, madera, latón y pilotos), pilas, formatos, sonido, puente con Tauri y vista.
-- `src/designs/`: un archivo por diseño, todos con la misma interfaz (`design.ts`).
-- `src/settings/`: la ventana de ajustes.
+- `src-tauri/src/`: settings, logs, plan, alerts, quiet mode while gaming and prices (Rust).
+- `src/core/`: pixel fonts, chips, coins, balls, materials, stacks, formats, sound, the bridge to Tauri and the view.
+- `src/designs/`: one file per design, all with the same interface (`design.ts`).
+- `src/settings/`: the settings window.
 
-## Limitación conocida
+Prices live in `src-tauri/src/pricing.rs`; update them when new models come out. Pull requests are welcome.
 
-Los juegos en **pantalla completa exclusiva** pueden tapar la mesa. En **pantalla completa sin bordes** se ve bien.
+## License
+
+[MIT](LICENSE). Third-party licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

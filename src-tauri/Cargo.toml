@@ -2,7 +2,9 @@
 name = "claupier"
 version = "0.1.0"
 description = "Claupier: el uso de Claude como una mesa de casino en pixel art"
-authors = ["Needy Friends"]
+authors = ["NeedyFriends"]
+license = "MIT"
+repository = "https://github.com/FredManBA/claupier"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

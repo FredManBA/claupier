@@ -57,6 +57,17 @@
     "targets": [
       "nsis"
     ],
+    "publisher": "NeedyFriends",
+    "copyright": "Copyright (c) 2026 NeedyFriends. MIT License.",
+    "homepage": "https://github.com/FredManBA/claupier",
+    "category": "Utility",
+    "shortDescription": "Claude usage as a pixel art casino table",
+    "longDescription": "Claupier shows your Claude Code usage (plan limits and equivalent spend) as a small pixel art casino table that stays on top of your games and apps.",
+    "windows": {
+      "nsis": {
+        "languages": ["English", "Spanish"]
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
