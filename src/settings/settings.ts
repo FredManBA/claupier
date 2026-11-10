@@ -4,7 +4,7 @@
 import "./settings.css";
 import { advanceDemo, createBridge, demoSnapshot, type Bridge } from "../core/bridge";
 import { SoundEngine } from "../core/sound";
-import type { ChipStyle, DeepPartial, Settings, Snapshot } from "../core/types";
+import type { DeepPartial, Settings, Snapshot } from "../core/types";
 import { DesignView } from "../core/view";
 import { DESIGN_LIST } from "../designs/index";
 
@@ -183,23 +183,15 @@ const SECTIONS: Section[] = [
         label: "Silenciar en juego",
         help: "Con una app en pantalla completa o con Windows en No molestar.",
       },
-      {
-        kind: "choice",
-        path: "sound.chipStyle",
-        label: "Tipo de ficha",
-        options: [["clay", "Arcilla"], ["ceramic", "Cerámica"], ["soft", "Suave"]],
-        help: "Al elegir una, suena. Arcilla es la de los casinos; suave molesta menos al jugar.",
-        onPick: (style) => playChips(style as ChipStyle),
-      },
-      { kind: "action", label: "Probar", button: "Escuchar fichas", run: () => playChips(settings.sound.chipStyle) },
+      { kind: "action", label: "Probar", button: "Escuchar fichas", run: () => playChips() },
     ],
   },
 ];
 
 /** Tres fichas cayendo sobre la pila, con el volumen elegido. */
-function playChips(style: ChipStyle) {
+function playChips() {
   sound.configure(settings.sound, false);
-  [0, 170, 320].forEach((delay) => window.setTimeout(() => sound.preview("chip", style), delay));
+  [0, 170, 320].forEach((delay) => window.setTimeout(() => sound.preview("chip"), delay));
 }
 
 // ── Utilidades ─────────────────────────────────────────────────────────────
@@ -430,8 +422,8 @@ function renderDesigns(): HTMLElement {
       const canvas = el("canvas");
       stage.append(canvas);
       const design = info.create();
-      // Escala entera más grande que quepa en la tarjeta (unos 250×250 px).
-      const scale = Math.max(1, Math.min(4, Math.floor(Math.min(250 / design.width, 250 / design.height))));
+      // Escala entera más grande que quepa en la tarjeta (unos 250×320 px).
+      const scale = Math.max(1, Math.min(4, Math.floor(Math.min(250 / design.width, 320 / design.height))));
       views.push(new DesignView(canvas, design, scale));
     } else {
       stage.append(el("span", { className: "soon", textContent: "Pronto" }));

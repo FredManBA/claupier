@@ -248,18 +248,24 @@ mod tests {
 
     #[test]
     fn lee_solo_lineas_completas_y_continua_donde_quedo() {
-        let dir = std::env::temp_dir().join(format!("claupier-test-{}", std::process::id()));
+        // Carpeta única por corrida: el número de proceso se reutiliza en Windows.
+        let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("claupier-test-{}-{nanos}", std::process::id()));
+        fs::remove_dir_all(&dir).ok();
         fs::create_dir_all(&dir).unwrap();
         let file = dir.join("s.jsonl");
         // La segunda línea queda a medias, como si Claude Code la estuviera escribiendo.
+        // La primera se genera una sola vez: Claude Code solo añade al final, así
+        // que la parte ya leída del archivo nunca cambia.
+        let first = line("m1", 5);
         let partial = line("m2", 7);
-        fs::write(&file, format!("{}\n{}", line("m1", 5), &partial[..40])).unwrap();
+        fs::write(&file, format!("{first}\n{}", &partial[..40])).unwrap();
 
         let mut s = LogScanner::new(dir.clone());
         assert!(s.scan());
         assert_eq!(s.totals_since(Utc::now() - chrono::Duration::hours(1)).messages, 1);
 
-        fs::write(&file, format!("{}\n{}\n", line("m1", 5), partial)).unwrap();
+        fs::write(&file, format!("{first}\n{partial}\n")).unwrap();
         assert!(s.scan());
         assert_eq!(s.totals_since(Utc::now() - chrono::Duration::hours(1)).messages, 2);
         assert!(!s.scan(), "sin cambios no hay nada nuevo");

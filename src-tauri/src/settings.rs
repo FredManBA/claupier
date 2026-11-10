@@ -45,13 +45,11 @@ pub struct Sound {
     /// 0 a 1.
     pub volume: f64,
     pub mute_in_game: bool,
-    /// "clay" (arcilla), "ceramic" (cerámica) o "soft" (suave).
-    pub chip_style: String,
 }
 
 impl Default for Sound {
     fn default() -> Self {
-        Self { enabled: false, volume: 0.5, mute_in_game: true, chip_style: "clay".into() }
+        Self { enabled: false, volume: 0.5, mute_in_game: true }
     }
 }
 
@@ -141,7 +139,6 @@ impl Settings {
         }
         let s = &mut self.sound;
         s.volume = if s.volume.is_finite() { s.volume.clamp(0.0, 1.0) } else { 0.5 };
-        one_of(&mut s.chip_style, &["clay", "ceramic", "soft"], "clay");
         if parse_hotkey(&self.hotkey_toggle).is_err() {
             self.hotkey_toggle = d.hotkey_toggle;
         }

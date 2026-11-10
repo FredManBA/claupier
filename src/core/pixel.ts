@@ -62,19 +62,20 @@ export function textWidth(text: string): number {
   return Math.max(0, w - 1);
 }
 
-export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {
+/** Dibuja texto con la fuente de 3×5. `size` multiplica cada píxel (1 o 2). */
+export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, size = 1) {
   ctx.fillStyle = color;
   let cx = Math.round(x);
   for (const ch of text.toUpperCase()) {
     const g = glyph(ch);
-    const top = Math.round(y) - (g.length - 5) / 2;
+    const top = Math.round(y) - ((g.length - 5) / 2) * size;
     for (let row = 0; row < g.length; row++) {
       const line = g[row];
       for (let col = 0; col < line.length; col++) {
-        if (line[col] === "#") ctx.fillRect(cx + col, top + row, 1, 1);
+        if (line[col] === "#") ctx.fillRect(cx + col * size, top + row * size, size, size);
       }
     }
-    cx += g[0].length + 1;
+    cx += (g[0].length + 1) * size;
   }
 }
 
@@ -124,7 +125,8 @@ export const PALETTES = {
   red: { o: OUTLINE, b: "#c9383e", s: "#f1e6d2", i: "#de5d63", l: "#ea7a7f", e: "#9a252b", d: "#6a191f" },
   green: { o: OUTLINE, b: "#2f9a52", s: "#f1e6d2", i: "#4fb771", l: "#6fd08f", e: "#216f3d", d: "#154a29" },
   black: { o: "#08070b", b: "#35333f", s: "#e6dfcf", i: "#4b4958", l: "#64627a", e: "#25232d", d: "#17161c" },
-  orange: { o: OUTLINE, b: "#f28a1e", s: "#fff0cf", i: "#ffac4f", l: "#ffc477", e: "#c3640b", d: "#874405" },
+  // La ficha más cara: marcas y centro dorados.
+  orange: { o: OUTLINE, b: "#f28a1e", s: "#ffe08a", i: "#ffbf3f", l: "#ffd77a", e: "#c3640b", d: "#874405" },
   bank: { o: OUTLINE, b: "#3c7fd0", s: "#f1e6d2", i: "#5f9de3", l: "#86b8ef", e: "#2a5d9f", d: "#1b3f70" },
   bankWarn: { o: OUTLINE, b: "#d99a2b", s: "#fff0cf", i: "#ebb350", l: "#f5c873", e: "#a8721a", d: "#6f4a10" },
   bankBad: { o: OUTLINE, b: "#c9463c", s: "#f1e6d2", i: "#dc675e", l: "#e8857d", e: "#962f28", d: "#651e1a" },
