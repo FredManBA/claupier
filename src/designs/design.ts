@@ -1,7 +1,7 @@
 import type { DesignId, Motion, Settings, Snapshot } from "../core/types";
 
 /** Señales de sonido. Los diseños las emiten; `core/sound.ts` decide si suenan. */
-export type Cue = "chip" | "reel" | "lever" | "ball" | "bag";
+export type Cue = "chip" | "coin" | "reel" | "lever" | "ball" | "bag";
 
 export interface DesignContext {
   settings: Settings;

@@ -1,24 +1,27 @@
 // Tragamonedas: tres rodillos (banca de 5 h, semana y dinero del periodo).
 // Cuando un valor cambia, la palanca baja y su rodillo gira hasta el nuevo.
-// Por cada dólar gastado sale una moneda que cae en la bandeja; el montón
-// solo crece, y al llegar a $100 se embolsa y la bolsa pasa a la pila de la
-// derecha.
+// El gasto cae por la ranura central a la bandeja, cambiado en monedas de
+// colores ($1 a $500, como las fichas). Si el cambio junta varias monedas en
+// una de más valor, las que sobran se desvanecen y cae la nueva.
+//
+// PRUEBA PENDIENTE DE VALIDAR: `?coins=chips` muestra la misma bandeja con las
+// fichas de casino en pilas, para que Fredman elija entre las dos.
 
 import {
   PERIOD_LABEL,
   STATUS_SHORT,
   bankUrgency,
   bankValue,
-  formatMoney,
   formatMoneyShort,
   resetLabels,
   tokensLabel,
   periodTotals,
 } from "../core/format";
-import { BAG_H, BAG_W, COINS_PER_BAG, type CoinSpot, SPIN, bagSprite, coinSprite, layoutHeap } from "../core/coins";
+import { type CoinPalette, type CoinSpot, SPIN, coinSprite, layoutHeap } from "../core/coins";
 import { drawText, textWidth } from "../core/font";
-import { easeInOut, lerp } from "../core/anim";
-import { BRASS, LED, LOGO_GRADIENT, drawGhost, drawPlate, engrave, layer, ledKind, rect, rounded } from "../core/paint";
+import { lerp } from "../core/anim";
+import { BRASS, LED, LOGO_GRADIENT, drawGhost, layer, ledKind, rect, rounded } from "../core/paint";
+import { DENOMS, Stack, chipsFor } from "../core/stack";
 import type { PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
@@ -65,30 +68,31 @@ const ITEM = 12; // separación entre valores del rodillo
 const SPIN_MS = 900;
 const SPIN_STAGGER = 150;
 const LEVER_MS = 520;
-const TRAY = { x: 5, y: 85, w: 94, h: 33 };
+/** Sin placa abajo: la bandeja ocupa todo el pie de la máquina. */
+const TRAY = { x: 5, y: 85, w: 94, h: 50 };
 /** Suelo de la bandeja: la fila de abajo de las monedas. */
-const FLOOR = 115;
-/** Zona del montón (a la izquierda) y de las bolsas (a la derecha). */
+const FLOOR = TRAY.y + TRAY.h - 3;
+/** La ranura, centrada sobre la bandeja. */
+const CHUTE = { x: Math.floor((BODY_W - 28) / 2), y: 79, w: 28 };
 const HEAP_X = 8;
-const HEAP_W = 64;
-const BAGS_X = 73;
-const CHUTE = { x: 26, y: 79, w: 28 };
-const PLATE = { x: 6, y: 122, w: 92, h: 15 };
+const HEAP_W = 88;
 
 // Monedas
-const FALL_MS = 330;
+const FALL_MS = 360;
 const SETTLE_MS = 90;
-const DROP_EVERY = 60;
+const DROP_EVERY = 90;
+const FADE_MS = 260;
+/** Monedas que se dibujan; si hay más, se cuentan. */
+const MAX_COINS = 36;
 /** Más monedas que esto en cola: las primeras entran sin animación. */
-const MAX_QUEUE = 24;
-const BAG_DROP_MS = 260;
-const BAG_FILL_MS = 420;
-const BAG_HOP_MS = 300;
-const BAG_MS = BAG_DROP_MS + BAG_FILL_MS + BAG_HOP_MS;
-/** Bolsas que se ven en la pila; si hay más, se cuentan. */
-const BAG_SLOTS = 6;
+const MAX_QUEUE = 16;
 
-const SPOTS: CoinSpot[] = layoutHeap(COINS_PER_BAG, HEAP_W, FLOOR + 1, 32).map((s) => ({ ...s, x: s.x + HEAP_X }));
+const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR + 1, HEAP_W / 2, "big").map((s) => ({ ...s, x: s.x + HEAP_X }));
+const COIN_COLORS = DENOMS.map((d) => d.palette as CoinPalette);
+
+/** Pilas de fichas de la variante `?coins=chips`, una por valor. */
+const CHIP_STACK_X = (i: number) => TRAY.x + 2 + i * 18;
+const CHIP_MAX_VISIBLE = 8;
 
 interface Reel {
   value: string;
@@ -100,11 +104,19 @@ interface Reel {
 }
 
 interface FlyingCoin {
-  spot: number;
+  /** Índice del valor en `DENOMS`. */
+  denom: number;
   start: number;
   landed: boolean;
   /** De dónde sale: la ranura, con un poco de variación. */
   fromX: number;
+}
+
+/** Moneda que se va (el cambio la juntó con otras en una de más valor). */
+interface FadingCoin {
+  denom: number;
+  spot: CoinSpot;
+  start: number;
 }
 
 /** Frena con un pequeño rebote al final, como un rodillo de verdad. */
@@ -118,13 +130,6 @@ function filler(kind: number): string {
   return `${Math.floor(Math.random() * 100)}%`;
 }
 
-/** Posición de la bolsa `i` en la pila: 3 abajo, 2 en medio y 1 arriba. */
-function bagSlot(i: number) {
-  const row = i < 3 ? 0 : i < 5 ? 1 : 2;
-  const col = row === 0 ? i : row === 1 ? i - 3 : 0;
-  return { x: BAGS_X + row * 4 + col * 8, y: FLOOR + 1 - BAG_H - row * 8 };
-}
-
 export class Tragamonedas implements Design {
   readonly id = "tragamonedas" as const;
   readonly width = W;
@@ -135,13 +140,20 @@ export class Tragamonedas implements Design {
   private snap: Snapshot | null = null;
   private ctx: DesignContext | null = null;
 
-  // Monedas
-  private heap = 0;
-  private bags = 0;
-  private queue = 0;
+  // Monedas: el montón en orden de llegada (cada número es un valor de `DENOMS`)
+  private heap: number[] = [];
+  private queue: number[] = [];
   private flying: FlyingCoin[] = [];
-  private bagging: { start: number } | null = null;
+  private fading: FadingCoin[] = [];
   private nextDrop = 0;
+
+  // Variante de prueba con fichas
+  private readonly useChips = new URLSearchParams(location.search).get("coins") === "chips";
+  private stacks = DENOMS.map((d, i) => new Stack(CHIP_STACK_X(i), FLOOR + 1, d.palette, CHIP_MAX_VISIBLE));
+
+  constructor() {
+    for (const st of this.stacks) st.onLand = () => this.ctx?.cue("coin");
+  }
 
   setSnapshot(snap: Snapshot, ctx: DesignContext, now: number, first: boolean) {
     this.ctx = ctx;
@@ -175,7 +187,12 @@ export class Tragamonedas implements Design {
       ctx.cue("lever");
     }
 
-    this.setCoins(Math.floor(Math.max(0, cost)), animate, now);
+    const target = chipsFor(cost);
+    if (this.useChips) {
+      target.forEach((n, i) => this.stacks[i].setTarget(n, now, first ? "instant" : ctx.motion));
+    } else {
+      this.setCoins(target, animate, now);
+    }
     this.snap = snap;
   }
 
@@ -185,36 +202,57 @@ export class Tragamonedas implements Design {
 
   // ── Monedas ──────────────────────────────────────────────────────────────
 
-  /** Total que habrá cuando terminen de caer las monedas. */
-  private get coinTotal() {
-    return this.bags * COINS_PER_BAG + this.heap + this.flying.length + this.queue;
+  /** Monedas de cada valor que habrá cuando termine todo lo que está cayendo. */
+  private coinCounts(): number[] {
+    const counts = DENOMS.map(() => 0);
+    for (const d of this.heap) counts[d]++;
+    for (const c of this.flying) counts[c.denom]++;
+    for (const d of this.queue) counts[d]++;
+    return counts;
   }
 
-  private setCoins(total: number, animate: boolean, now: number) {
-    if (!animate || total < this.coinTotal) {
-      // Al empezar, sin animación o con un periodo nuevo: directo.
+  /**
+   * Lleva la bandeja al cambio nuevo. Sin animación, el montón se arma de una
+   * vez (las de más valor abajo). Con animación, las que sobran se desvanecen
+   * y las que faltan caen por la ranura, de la más cara a la más barata.
+   */
+  private setCoins(target: number[], animate: boolean, now: number) {
+    if (!animate) {
+      this.heap = target.flatMap((n, d) => Array.from({ length: n }, () => d)).reverse();
+      this.queue = [];
       this.flying = [];
-      this.queue = 0;
-      this.bagging = null;
-      this.bags = Math.floor(total / COINS_PER_BAG);
-      this.heap = total % COINS_PER_BAG;
+      this.fading = [];
       return;
     }
-    this.queue += total - this.coinTotal;
-    if (this.queue > MAX_QUEUE) {
-      // Demasiadas: las primeras se colocan ya y caen solo las últimas.
-      if (this.bagging) {
-        this.bags++;
-        this.heap = 0;
-        this.bagging = null;
+    const current = this.coinCounts();
+    for (let d = 0; d < DENOMS.length; d++) {
+      let extra = current[d] - target[d];
+      // Primero las que aún no salieron, luego las que caen, luego las del montón (de arriba abajo).
+      for (let i = this.queue.length - 1; extra > 0 && i >= 0; i--) {
+        if (this.queue[i] === d) {
+          this.queue.splice(i, 1);
+          extra--;
+        }
       }
-      this.heap += this.flying.length;
-      this.flying = [];
-      const before = this.bags * COINS_PER_BAG + this.heap + this.queue - MAX_QUEUE;
-      this.bags = Math.floor(before / COINS_PER_BAG);
-      this.heap = before % COINS_PER_BAG;
-      this.queue = MAX_QUEUE;
+      for (let i = this.flying.length - 1; extra > 0 && i >= 0; i--) {
+        if (this.flying[i].denom === d) {
+          this.flying.splice(i, 1);
+          extra--;
+        }
+      }
+      for (let i = this.heap.length - 1; extra > 0 && i >= 0; i--) {
+        if (this.heap[i] === d) {
+          if (i < SPOTS.length) this.fading.push({ denom: d, spot: SPOTS[i], start: now });
+          this.heap.splice(i, 1);
+          extra--;
+        }
+      }
     }
+    for (let d = DENOMS.length - 1; d >= 0; d--) {
+      for (let k = 0; k < target[d] - current[d]; k++) this.queue.push(d);
+    }
+    // Demasiadas: las primeras se colocan ya y caen solo las últimas.
+    while (this.queue.length > MAX_QUEUE) this.heap.push(this.queue.shift()!);
     if (this.nextDrop < now) this.nextDrop = now;
   }
 
@@ -244,45 +282,34 @@ export class Tragamonedas implements Design {
       else busy = true;
     }
 
+    if (this.useChips) {
+      for (const st of this.stacks) if (st.update(now)) busy = true;
+    }
+
     // Monedas que tocan el montón
     for (const coin of this.flying) {
       if (!coin.landed && now - coin.start >= FALL_MS) {
         coin.landed = true;
-        this.ctx?.cue("chip");
+        this.ctx?.cue("coin");
       }
     }
-    const settled = this.flying.filter((c) => now - c.start >= FALL_MS + SETTLE_MS);
-    if (settled.length > 0) {
-      this.heap += settled.length;
-      this.flying = this.flying.filter((c) => !settled.includes(c));
+    while (this.flying.length > 0 && now - this.flying[0].start >= FALL_MS + SETTLE_MS) {
+      this.heap.push(this.flying.shift()!.denom);
     }
-
-    // Embolsado
-    if (this.bagging) {
-      const t = now - this.bagging.start;
-      if (t >= BAG_MS) {
-        this.ctx?.cue("bag");
-        this.bags++;
-        this.heap = 0;
-        this.bagging = null;
-      }
-    } else if (this.heap >= COINS_PER_BAG && this.flying.length === 0) {
-      this.bagging = { start: now };
-    }
+    this.fading = this.fading.filter((f) => now - f.start < FADE_MS);
 
     // Siguiente moneda por la ranura
-    if (!this.bagging && this.queue > 0 && now >= this.nextDrop && this.heap + this.flying.length < COINS_PER_BAG) {
+    if (this.queue.length > 0 && now >= this.nextDrop) {
       this.flying.push({
-        spot: this.heap + this.flying.length,
+        denom: this.queue.shift()!,
         start: now,
         landed: false,
         fromX: CHUTE.x + 10 + Math.round(Math.random() * 8),
       });
-      this.queue--;
       this.nextDrop = now + DROP_EVERY;
     }
 
-    return busy || this.flying.length > 0 || this.queue > 0 || this.bagging !== null;
+    return busy || this.flying.length > 0 || this.queue.length > 0 || this.fading.length > 0;
   }
 
   msUntilIdleEvent(): number {
@@ -318,13 +345,15 @@ export class Tragamonedas implements Design {
     });
 
     this.drawLever(g, now);
-    this.drawTrayContents(g, now);
+    if (this.useChips) this.drawChipStacks(g, now);
+    else this.drawTrayContents(g, now);
     g.drawImage(layer("traga:labio", W, H, (b) => this.drawTrayLip(b)), 0, 0);
-    if (this.bags > BAG_SLOTS) {
-      const label = `×${this.bags}`;
-      drawText(g, label, BAGS_X + 13 - Math.floor(textWidth(label) / 2), TRAY.y + 4, C.gold, { outline: C.ink });
+    // Si hay más monedas de las que caben, se cuentan las que no se ven.
+    const hidden = this.heap.length - SPOTS.length;
+    if (!this.useChips && hidden > 0) {
+      const label = `+${Math.min(999, hidden)}`;
+      drawText(g, label, TRAY.x + TRAY.w - 5 - textWidth(label), TRAY.y + 5, C.gold, { outline: C.ink });
     }
-    this.drawPlate(g, snap);
   }
 
   private drawCabinet(g: CanvasRenderingContext2D) {
@@ -482,85 +511,51 @@ export class Tragamonedas implements Design {
   }
 
   private drawTrayContents(g: CanvasRenderingContext2D, now: number) {
-    const bag = bagSprite();
-    // Pila de bolsas
-    const shownBags = Math.min(this.bags, BAG_SLOTS);
-    for (let i = 0; i < shownBags; i++) {
-      const s = bagSlot(i);
-      g.drawImage(bag, s.x, s.y);
-    }
-
-    // Montón: durante el embolsado se vacía desde arriba.
-    let visible = this.heap;
-    const bagging = this.bagging;
-    const bt = bagging ? now - bagging.start : 0;
-    if (bagging && bt > BAG_DROP_MS) {
-      const k = Math.min(1, (bt - BAG_DROP_MS) / BAG_FILL_MS);
-      visible = Math.round(this.heap * (1 - easeInOut(k)));
-    }
-    for (let i = 0; i < Math.min(visible, SPOTS.length); i++) {
+    const shown = Math.min(this.heap.length, SPOTS.length);
+    for (let i = 0; i < shown; i++) {
       const s = SPOTS[i];
-      g.drawImage(coinSprite(s.pose), s.x, s.y);
+      g.drawImage(coinSprite(s.pose, COIN_COLORS[this.heap[i]], "big"), s.x, s.y);
     }
-
-    // Monedas en el aire
-    for (const coin of this.flying) this.drawFlyingCoin(g, coin, now);
-
-    if (bagging) this.drawBagging(g, bag, bt, visible);
+    // Las que se van suben un poco y se desvanecen en dos pasos.
+    for (const f of this.fading) {
+      const t = Math.min(1, (now - f.start) / FADE_MS);
+      g.globalAlpha = t < 0.5 ? 0.6 : 0.3;
+      g.drawImage(coinSprite(f.spot.pose, COIN_COLORS[f.denom], "big"), f.spot.x, f.spot.y - Math.round(t * 4));
+      g.globalAlpha = 1;
+    }
+    this.flying.forEach((coin, i) => this.drawFlyingCoin(g, coin, this.heap.length + i, now));
   }
 
-  private drawFlyingCoin(g: CanvasRenderingContext2D, coin: FlyingCoin, now: number) {
-    const target = SPOTS[coin.spot];
+  private drawFlyingCoin(g: CanvasRenderingContext2D, coin: FlyingCoin, spot: number, now: number) {
+    const color = COIN_COLORS[coin.denom];
+    const target = SPOTS[Math.min(spot, SPOTS.length - 1)];
     const t = (now - coin.start) / FALL_MS;
     if (t >= 1) {
       // Rebote corto al tocar el montón
       const s = (now - coin.start - FALL_MS) / SETTLE_MS;
       const hop = s < 1 ? Math.round(Math.sin(s * Math.PI) * 2) : 0;
-      g.drawImage(coinSprite(target.pose), target.x, target.y - hop);
+      g.drawImage(coinSprite(target.pose, color, "big"), target.x, target.y - hop);
       return;
     }
     const fromY = CHUTE.y + 2;
     const x = lerp(coin.fromX, target.x, t);
     const y = lerp(fromY, target.y, t * t);
     const frame = SPIN[Math.floor((now - coin.start) / 55) % SPIN.length];
-    const sprite = coinSprite(frame);
-    g.drawImage(sprite, Math.round(x + (8 - sprite.width) / 2), Math.round(y));
+    const sprite = coinSprite(frame, color, "big");
+    g.drawImage(sprite, Math.round(x + (12 - sprite.width) / 2), Math.round(y));
   }
 
-  /** La bolsa cae sobre el montón, se traga las monedas y salta a la pila. */
-  private drawBagging(g: CanvasRenderingContext2D, bag: HTMLCanvasElement, bt: number, visibleCoins: number) {
-    // Encima del montón, centrada en la zona de caída
-    const restX = HEAP_X + 32 - Math.floor(BAG_W / 2);
-    let topY = FLOOR - BAG_H;
-    for (let i = 0; i < Math.min(visibleCoins, SPOTS.length); i++) topY = Math.min(topY, SPOTS[i].y - BAG_H + 6);
-    const slot = bagSlot(Math.min(this.bags, BAG_SLOTS - 1));
-    let x = restX;
-    let y = topY;
-    if (bt < BAG_DROP_MS) {
-      const t = bt / BAG_DROP_MS;
-      y = lerp(CHUTE.y - 2, topY, t * t);
-    } else if (bt > BAG_DROP_MS + BAG_FILL_MS) {
-      const t = Math.min(1, (bt - BAG_DROP_MS - BAG_FILL_MS) / BAG_HOP_MS);
-      const k = easeInOut(t);
-      x = lerp(restX, slot.x, k);
-      y = lerp(FLOOR - BAG_H, slot.y, k) - Math.sin(k * Math.PI) * 10;
-    } else {
-      // Mientras se llena, baja con el montón
-      const t = (bt - BAG_DROP_MS) / BAG_FILL_MS;
-      y = lerp(topY, FLOOR - BAG_H, easeInOut(t));
-    }
-    g.drawImage(bag, Math.round(x), Math.round(y));
+  /** Variante de prueba: las fichas de casino en pilas, una por valor. */
+  private drawChipStacks(g: CanvasRenderingContext2D, now: number) {
+    this.stacks.forEach((st) => {
+      const extra = st.count - st.maxVisible;
+      if (extra > 0) {
+        const label = extra > 999 ? "+999" : `+${extra}`;
+        const y = st.chipY(st.maxVisible - 1) - 7;
+        drawText(g, label, st.x + 9 - Math.floor(textWidth(label) / 2), y, C.gold, { outline: C.ink });
+      }
+      st.draw(g, now);
+    });
   }
 
-  private drawPlate(g: CanvasRenderingContext2D, snap: Snapshot | null) {
-    const { x, y, w, h } = PLATE;
-    g.drawImage(layer("traga:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
-    const settings = this.ctx?.settings;
-    if (!snap || !settings) return;
-    const totals = periodTotals(snap, settings.period);
-    const money = formatMoney(totals.costUsd, settings);
-    engrave(g, money, x + 5, y + 4, BRASS.ink, { font: "big" });
-    const tokens = tokensLabel(totals.totalTokens, w - 15 - textWidth(money, "big"));
-    engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 5, "#4a3210");
-  }
 }

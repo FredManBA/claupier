@@ -5,7 +5,7 @@
 
 import { BALL, drawBall } from "./core/balls";
 import { CHIP_DIMS, PALETTES, type PaletteName, chipSprites, drawChip } from "./core/chips";
-import { SPIN, bagSprite, coinSprite, layoutHeap } from "./core/coins";
+import { type CoinPalette, SPIN, coinSprite, layoutHeap } from "./core/coins";
 import { drawText } from "./core/font";
 import { LOGO_GRADIENT } from "./core/paint";
 
@@ -49,8 +49,9 @@ sheet(names.length * 14 + 4, 12, "#173f2e", (g) => {
 sheet(150, 40, "#1d0609", (g) => {
   (["flat", "round", "tilt", "edge"] as const).forEach((p, i) => g.drawImage(coinSprite(p), 3 + i * 10, 3));
   SPIN.forEach((p, i) => g.drawImage(coinSprite(p), 46 + i * 9, 3));
-  g.drawImage(bagSprite(), 86, 2);
-  for (const s of layoutHeap(60, 64, 38, 32)) g.drawImage(coinSprite(s.pose), 82 + s.x, s.y);
+  const colors: CoinPalette[] = ["white", "red", "green", "black", "orange"];
+  colors.forEach((c, i) => g.drawImage(coinSprite("flat", c), 86 + i * 10, 4));
+  layoutHeap(20, 64, 38, 32).forEach((s, i) => g.drawImage(coinSprite(s.pose, colors[4 - Math.floor(i / 4)]), 82 + s.x, s.y));
 });
 
 // Bolas del pachinko.

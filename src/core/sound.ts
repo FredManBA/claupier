@@ -7,7 +7,7 @@ import type { Cue } from "../designs/design";
 import type { Settings } from "./types";
 
 /** Separación mínima entre dos sonidos iguales, para que no se amontonen. */
-const MIN_GAP_MS: Record<Cue, number> = { chip: 45, reel: 35, lever: 300, ball: 70, bag: 300 };
+const MIN_GAP_MS: Record<Cue, number> = { chip: 45, coin: 45, reel: 35, lever: 300, ball: 70, bag: 300 };
 
 /** [frecuencia Hz, ganancia relativa, caída en s] de cada resonancia. */
 type Mode = [number, number, number];
@@ -103,6 +103,7 @@ export class SoundEngine {
 
     switch (cue) {
       case "chip":
+      case "coin":
         this.coin(t, COIN_BASE_HZ * jitter);
         break;
       case "reel":
