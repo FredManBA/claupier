@@ -99,6 +99,24 @@ const CHIP: string[] = [
   "...oooooooooo...",
 ];
 
+/** Ficha mini (9×6) para la píldora, la bandeja y las casillas. */
+const MINI: string[] = [
+  "..ooooo..",
+  ".obsbsbo.",
+  "obiilibbo",
+  "oebbbbbeo",
+  "oseeseeso",
+  ".ooooooo.",
+];
+
+export type ChipSize = "big" | "mini";
+
+/** Medidas de cada tamaño: ancho, alto y cuánto sube cada ficha en la pila. */
+export const CHIP_DIMS: Record<ChipSize, { w: number; h: number; step: number }> = {
+  big: { w: 16, h: 9, step: 3 },
+  mini: { w: 9, h: 6, step: 2 },
+};
+
 const SLOT: string[] = [
   "....xxxxxxxx....",
   "..xxxxxxxxxxxx..",
@@ -134,7 +152,7 @@ export const PALETTES = {
 
 export type PaletteName = keyof typeof PALETTES;
 
-function spriteFrom(map: string[], colors: Record<string, string>): HTMLCanvasElement {
+export function spriteFrom(map: string[], colors: Record<string, string>): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = map[0].length;
   c.height = map.length;
@@ -154,25 +172,34 @@ export interface ChipSprites {
   face: HTMLCanvasElement;
   /** La ficha vista de canto, para el centro del giro. */
   edge: HTMLCanvasElement;
+  w: number;
+  h: number;
 }
 
 const cache = new Map<string, ChipSprites>();
 
-export function chipSprites(name: PaletteName): ChipSprites {
-  const hit = cache.get(name);
+export function chipSprites(name: PaletteName, size: ChipSize = "big"): ChipSprites {
+  const key = `${name}:${size}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   const p: ChipPalette = PALETTES[name];
-  const face = spriteFrom(CHIP, { ...p });
-  const edge = spriteFrom(CHIP, { o: p.o, b: p.e, s: p.s, i: p.e, l: p.b, e: p.d, d: p.d });
-  const sprites = { face, edge };
-  cache.set(name, sprites);
+  const map = size === "big" ? CHIP : MINI;
+  const face = spriteFrom(map, { ...p });
+  const edge = spriteFrom(map, { o: p.o, b: p.e, s: p.s, i: p.e, l: p.b, e: p.d, d: p.d });
+  const sprites = { face, edge, w: map[0].length, h: map.length };
+  cache.set(key, sprites);
   return sprites;
 }
 
-let slotSprite: HTMLCanvasElement | null = null;
+const slots = new Map<string, HTMLCanvasElement>();
+/** Sombra en el paño donde va una pila (solo para fichas grandes). */
 export function slot(color: string): HTMLCanvasElement {
-  slotSprite ??= spriteFrom(SLOT, { x: color });
-  return slotSprite;
+  let s = slots.get(color);
+  if (!s) {
+    s = spriteFrom(SLOT, { x: color });
+    slots.set(color, s);
+  }
+  return s;
 }
 
 /**
@@ -193,10 +220,10 @@ export function drawChip(
     return;
   }
   const src = scaleX < 0.34 ? sprites.edge : sprites.face;
-  const w = Math.max(2, Math.round(CHIP_W * scaleX));
-  const off = Math.floor((CHIP_W - w) / 2);
+  const w = Math.max(2, Math.round(sprites.w * scaleX));
+  const off = Math.floor((sprites.w - w) / 2);
   for (let c = 0; c < w; c++) {
-    const sc = Math.min(CHIP_W - 1, Math.floor(((c + 0.5) / w) * CHIP_W));
-    ctx.drawImage(src, sc, 0, 1, CHIP_H, px + off + c, py, 1, CHIP_H);
+    const sc = Math.min(sprites.w - 1, Math.floor(((c + 0.5) / w) * sprites.w));
+    ctx.drawImage(src, sc, 0, 1, sprites.h, px + off + c, py, 1, sprites.h);
   }
 }

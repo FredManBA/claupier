@@ -1,6 +1,9 @@
 import type { DesignId } from "../core/types";
 import type { Design, DesignInfo } from "./design";
 import { Mesa } from "./mesa";
+import { Pachinko } from "./pachinko";
+import { Pildora } from "./pildora";
+import { Tragamonedas } from "./tragamonedas";
 
 export const DESIGN_LIST: DesignInfo[] = [
   {
@@ -14,22 +17,22 @@ export const DESIGN_LIST: DesignInfo[] = [
     id: "pildora",
     name: "Píldora",
     description: "Una fila mínima para jugar.",
-    ready: false,
-    create: () => new Mesa(),
+    ready: true,
+    create: () => new Pildora(),
   },
   {
     id: "tragamonedas",
     name: "Tragamonedas",
     description: "Tres rodillos y la palanca.",
-    ready: false,
-    create: () => new Mesa(),
+    ready: true,
+    create: () => new Tragamonedas(),
   },
   {
     id: "pachinko",
     name: "Pachinko",
-    description: "Las bolas son tus tokens.",
-    ready: false,
-    create: () => new Mesa(),
+    description: "Cada bola que cae suma una ficha.",
+    ready: true,
+    create: () => new Pachinko(),
   },
 ];
 

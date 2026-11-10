@@ -1,6 +1,6 @@
 // Pilas de fichas animadas, compartidas por los diseños.
 
-import { CHIP_H, CHIP_STEP, PaletteName, chipSprites, drawChip, slot } from "./pixel";
+import { CHIP_DIMS, type ChipSize, type PaletteName, chipSprites, drawChip, slot } from "./pixel";
 import type { Motion } from "./types";
 
 export const DENOMS: { value: number; palette: PaletteName; label: string }[] = [
@@ -48,6 +48,7 @@ export class Stack {
     public palette: PaletteName,
     public maxVisible: number,
     public slotColor = "#143a2a",
+    public size: ChipSize = "big",
   ) {}
 
   /** Número de fichas que la pila tendrá al terminar las animaciones. */
@@ -114,12 +115,14 @@ export class Stack {
 
   /** Y del borde superior de la ficha en la posición `i` (0 = abajo). */
   chipY(i: number) {
-    return this.base - CHIP_H - i * CHIP_STEP;
+    const d = CHIP_DIMS[this.size];
+    return this.base - d.h - i * d.step;
   }
 
   draw(ctx: CanvasRenderingContext2D, now: number, palette: PaletteName = this.palette) {
-    ctx.drawImage(slot(this.slotColor), this.x, this.base - 6);
-    const sprites = chipSprites(palette);
+    if (this.size === "big") ctx.drawImage(slot(this.slotColor), this.x, this.base - 6);
+    const sprites = chipSprites(palette, this.size);
+    const fall = this.size === "big" ? 30 : 14;
     const visible = this.chips.slice(0, this.maxVisible);
     visible.forEach((c, i) => {
       if ((c.state === "drop" || c.state === "fade") && now < c.start) return; // aún no entra
@@ -128,7 +131,7 @@ export class Stack {
       let scaleX = 1;
       if (c.state === "drop") {
         const t = (now - c.start) / DROP_MS;
-        if (t < 1) y -= Math.round((1 - t * t) * 30);
+        if (t < 1) y -= Math.round((1 - t * t) * fall);
         else y -= 1; // pequeño rebote al aterrizar
       } else if (c.state === "fade") {
         const t = (now - c.start) / FADE_MS;

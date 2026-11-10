@@ -19,6 +19,16 @@ export function formatMoney(usd: number, s: Pick<Settings, "currency" | "crcPerU
   return s.currency === "CRC" ? formatCrc(usd * s.crcPerUsd) : formatUsd(usd);
 }
 
+/** Dinero en 6 caracteres o menos, para espacios chicos (los rodillos). */
+export function formatMoneyShort(usd: number, s: Pick<Settings, "currency" | "crcPerUsd">): string {
+  if (s.currency === "CRC") return formatCrc(usd * s.crcPerUsd);
+  if (usd < 10) return `$${usd.toFixed(2)}`;
+  if (usd < 100) return `$${usd.toFixed(1)}`;
+  if (usd < 10_000) return `$${Math.round(usd)}`;
+  if (usd < 100_000) return `$${Math.round(usd / 1000)}K`;
+  return `$${(usd / 1e6).toFixed(1)}M`;
+}
+
 export function formatTokens(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e8 ? 0 : 1)}M`;
