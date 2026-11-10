@@ -65,8 +65,10 @@ export interface Settings {
   currency: "USD" | "CRC";
   crcPerUsd: number;
   motion: Motion;
-  sound: { enabled: boolean; volume: number; muteInGame: boolean };
+  sound: { enabled: boolean; volume: number; muteInGame: boolean; chipStyle: ChipStyle };
 }
+
+export type ChipStyle = "clay" | "ceramic" | "soft";
 
 export const DEFAULT_SETTINGS: Settings = {
   design: "mesa",
@@ -94,7 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   currency: "USD",
   crcPerUsd: 505,
   motion: "full",
-  sound: { enabled: false, volume: 0.5, muteInGame: true },
+  sound: { enabled: false, volume: 0.5, muteInGame: true, chipStyle: "clay" },
 };
 
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };

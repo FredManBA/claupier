@@ -37,7 +37,7 @@ body {
   background-image: radial-gradient(var(--felt-dark) 1px, transparent 1px);
   background-size: 8px 8px;
   color: var(--cream);
-  font: 14px/1.45 var(--text);
+  font: 15px/1.5 var(--text);
   border: 3px solid var(--trim);
   outline: 2px solid var(--ink);
   outline-offset: -5px;
@@ -51,14 +51,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
-  padding: 0 6px 0 16px;
+  height: 46px;
+  padding: 0 8px 0 20px;
   background: var(--felt-deep);
   border-bottom: 2px solid var(--trim-dark);
 }
 
 .title {
-  font: 16px var(--pixel);
+  font: 18px var(--pixel);
   color: var(--gold);
   letter-spacing: 1px;
 }
@@ -88,7 +88,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 148px 1fr;
+  grid-template-columns: 184px 1fr;
   min-height: 0;
 }
 
@@ -96,18 +96,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 8px;
+  padding: 16px 10px;
   background: rgb(13 37 25 / 0.55);
   border-right: 2px solid var(--trim-dark);
 }
 
 .nav button {
   text-align: left;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 2px solid transparent;
   background: none;
   color: var(--dim);
-  font: 12px var(--pixel);
+  font: 14px var(--pixel);
   cursor: pointer;
   transition: color 120ms var(--ease), background-color 120ms var(--ease);
 }
@@ -126,18 +126,18 @@ body {
 
 .content {
   overflow-y: auto;
-  padding: 16px 20px 24px;
+  padding: 20px 28px 32px;
   scrollbar-color: var(--trim-dark) transparent;
 }
 
 .content h2 {
-  margin: 0 0 4px;
-  font: 16px var(--pixel);
+  margin: 0 0 6px;
+  font: 20px var(--pixel);
   color: var(--gold);
 }
 
 .content .lead {
-  margin: 0 0 16px;
+  margin: 0 0 20px;
   color: var(--dim);
 }
 
@@ -146,7 +146,7 @@ body {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 4px 16px;
-  padding: 10px 0;
+  padding: 14px 0;
   border-bottom: 1px dashed rgb(125 90 30 / 0.6);
 }
 
@@ -156,14 +156,14 @@ body {
 
 .field > label,
 .field > .label {
-  font: 12px var(--pixel);
+  font: 14px var(--pixel);
   color: var(--cream);
 }
 
 .field .help {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--dim);
 }
 
@@ -178,8 +178,8 @@ body {
 /* Interruptor */
 .switch {
   position: relative;
-  width: 44px;
-  height: 22px;
+  width: 52px;
+  height: 26px;
   border: 2px solid var(--ink);
   background: var(--felt-deep);
   cursor: pointer;
@@ -192,8 +192,8 @@ body {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   background: var(--dim);
   transition: transform 160ms var(--ease), background-color 160ms var(--ease);
 }
@@ -203,7 +203,7 @@ body {
 }
 
 .switch[aria-checked="true"]::after {
-  transform: translateX(22px);
+  transform: translateX(26px);
   background: var(--cream);
 }
 
@@ -214,12 +214,12 @@ body {
 }
 
 .segmented button {
-  padding: 5px 9px;
+  padding: 7px 12px;
   border: none;
   border-right: 2px solid var(--ink);
   background: var(--felt-deep);
   color: var(--dim);
-  font: 11px var(--pixel);
+  font: 12px var(--pixel);
   cursor: pointer;
   transition: color 120ms var(--ease), background-color 120ms var(--ease);
 }
@@ -242,7 +242,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font: 12px var(--pixel);
+  font: 14px var(--pixel);
   color: var(--gold);
 }
 
@@ -252,8 +252,8 @@ body {
 }
 
 input[type="range"] {
-  width: 150px;
-  height: 18px;
+  width: 190px;
+  height: 22px;
   appearance: none;
   background: transparent;
   cursor: pointer;
@@ -283,23 +283,23 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 input[type="number"] {
-  width: 84px;
-  padding: 4px 6px;
+  width: 96px;
+  padding: 6px 8px;
   border: 2px solid var(--ink);
   background: var(--felt-deep);
   color: var(--gold);
-  font: 12px var(--pixel);
+  font: 14px var(--pixel);
   text-align: right;
 }
 
 /* Botones de acción y de atajo */
 .action,
 .hotkey {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 2px solid var(--ink);
   background: var(--trim);
   color: var(--ink);
-  font: 12px var(--pixel);
+  font: 13px var(--pixel);
   cursor: pointer;
   box-shadow: 0 3px 0 var(--trim-dark);
   transition: transform 100ms var(--ease), box-shadow 100ms var(--ease);
@@ -312,7 +312,7 @@ input[type="number"] {
 }
 
 .hotkey {
-  min-width: 130px;
+  min-width: 160px;
   background: var(--felt-deep);
   color: var(--gold);
   box-shadow: 0 3px 0 var(--ink);
@@ -327,14 +327,14 @@ input[type="number"] {
 .designs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
 .design-card {
   display: grid;
-  grid-template-rows: 150px auto auto;
-  gap: 4px;
-  padding: 10px;
+  grid-template-rows: 256px auto auto;
+  gap: 6px;
+  padding: 12px;
   border: 2px solid var(--ink);
   background: rgb(13 37 25 / 0.6);
   color: var(--cream);
@@ -372,12 +372,12 @@ input[type="number"] {
 }
 
 .design-card strong {
-  font: 12px var(--pixel);
+  font: 14px var(--pixel);
   color: var(--gold);
 }
 
 .design-card span {
-  font-size: 12px;
+  font-size: 13.5px;
   color: var(--dim);
 }
 
@@ -391,16 +391,16 @@ input[type="number"] {
 /* Posición: una pantalla en miniatura con sus cuatro esquinas */
 .screen {
   position: relative;
-  width: 132px;
-  height: 84px;
+  width: 168px;
+  height: 104px;
   border: 2px solid var(--ink);
   background: var(--felt-deep);
 }
 
 .screen button {
   position: absolute;
-  width: 26px;
-  height: 18px;
+  width: 32px;
+  height: 22px;
   border: 2px solid var(--ink);
   background: var(--felt);
   cursor: pointer;
@@ -422,7 +422,7 @@ input[type="number"] {
   height: auto;
   padding: 2px 6px;
   transform: translate(-50%, -50%);
-  font: 10px var(--pixel);
+  font: 12px var(--pixel);
   color: var(--dim);
 }
 
@@ -433,11 +433,11 @@ input[type="number"] {
 /* ── Estado ──────────────────────────────────────────────────────────────── */
 
 .status {
-  min-height: 30px;
-  padding: 7px 16px;
+  min-height: 34px;
+  padding: 8px 20px;
   background: var(--felt-deep);
   border-top: 2px solid var(--trim-dark);
-  font: 11px var(--pixel);
+  font: 13px var(--pixel);
   color: var(--dim);
 }
 
