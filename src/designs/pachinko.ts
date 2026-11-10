@@ -6,12 +6,12 @@
 
 import {
   PERIOD_LABEL,
-  STATUS_TEXT,
+  STATUS_SHORT,
   bankUrgency,
   bankValue,
   formatMoney,
-  formatReset,
-  formatTokens,
+  resetLabels,
+  tokensLabel,
   periodTotals,
 } from "../core/format";
 import { BALL, drawBall } from "../core/balls";
@@ -207,12 +207,23 @@ export class Pachinko implements Design {
     const shows = this.ctx?.settings.bankShows ?? "left";
 
     g.drawImage(layer("pachinko:fondo", W, H, (b) => this.drawMachine(b)), 0, 0);
+    // El valor de cada casilla (fuera de la capa fija, para que siga el estilo de texto).
+    DENOMS.forEach((d, i) => {
+      const x = POCKET_X(i) + 1 + Math.floor((15 - textWidth(d.label)) / 2);
+      drawText(g, d.label, x, POCKET_FLOOR + 4, DENOM_TEXT[i], { shadow: C.shadow });
+    });
     drawLed(g, W - 14, 8, plan?.status);
     if (snap?.ghost) drawGhost(g, 9, 8);
 
     // Banca de 5 h a la izquierda; la semana a la derecha.
-    this.drawReading(g, 9, "5H", plan?.fiveHour, plan?.status, shows);
-    this.drawReading(g, 76, "SEM", plan?.sevenDay, undefined, shows);
+    // Cada lectura tiene su hueco (la izquierda hasta la tolva, la derecha hasta
+    // el marco) y las dos cuentas atrás usan la misma forma.
+    const [reset5, resetWeek] = resetLabels([
+      { iso: plan?.fiveHour?.resetsAt, room: 30 },
+      { iso: plan?.sevenDay?.resetsAt, room: W - 6 - 76 },
+    ]);
+    this.drawReading(g, 9, reset5, "5H", plan?.fiveHour, plan?.status, shows);
+    this.drawReading(g, 76, resetWeek, "SEM", plan?.sevenDay, undefined, shows);
     const left5 = plan?.fiveHour ? Math.max(0, 100 - plan.fiveHour.used) : 0;
     this.drawHopper(g, Math.round((left5 / 100) * HOPPER_CAP));
     const leftW = plan?.sevenDay ? Math.max(0, 100 - plan.sevenDay.used) : 0;
@@ -226,6 +237,7 @@ export class Pachinko implements Design {
   private drawReading(
     g: CanvasRenderingContext2D,
     x: number,
+    reset: string,
     label: string,
     win: LimitWindow | null | undefined,
     status: string | undefined,
@@ -234,13 +246,12 @@ export class Pachinko implements Design {
     drawText(g, label, x, 17, C.dim);
     const v = bankValue(win, shows);
     if (v === null) {
-      const word = status ? STATUS_TEXT[status]?.[0] || "..." : "...";
+      const word = (status && STATUS_SHORT[status]) || "...";
       drawText(g, word, x, 24, C.warn, { shadow: C.shadow });
       return;
     }
     drawText(g, `${v}%`, x, 24, [C.cream, C.warn, C.bad][bankUrgency(win)], { shadow: C.shadow });
-    const reset = formatReset(win?.resetsAt);
-    if (reset) drawText(g, `@${reset}`, x, 31, C.dim);
+    if (reset) drawText(g, reset, x, 31, C.dim);
   }
 
   /** Lo que no cambia: marco, tablero, riel, clavos, casillas y tubo vacío. */
@@ -256,7 +267,7 @@ export class Pachinko implements Design {
     rect(g, 5, 5, 1, H - 10, C.boardDeep);
 
     const logo = "CLAUPIER";
-    drawText(g, logo, Math.floor((W - textWidth(logo, "big")) / 2), 7, LOGO_GRADIENT, { font: "big", shadow: C.shadow });
+    drawText(g, logo, Math.floor((W - textWidth(logo, "big", true)) / 2), 7, LOGO_GRADIENT, { font: "big", shadow: C.shadow });
 
     // Riel cromado con las esquinas de arriba redondeadas
     this.drawRail(g);
@@ -271,7 +282,7 @@ export class Pachinko implements Design {
     }
 
     // Casillas
-    DENOMS.forEach((d, i) => {
+    DENOMS.forEach((_, i) => {
       const x = POCKET_X(i);
       rect(g, x + 1, POCKET_TOP, 15, POCKET_FLOOR - POCKET_TOP + 1, C.pocket);
       for (const wx of [x, x + 16]) {
@@ -279,8 +290,6 @@ export class Pachinko implements Design {
         rect(g, wx, POCKET_TOP - 1, 1, 1, C.wallLight);
       }
       rect(g, x, POCKET_FLOOR + 1, 17, 1, C.wall);
-      const label = d.label;
-      drawText(g, label, x + 1 + Math.floor((15 - textWidth(label)) / 2), POCKET_FLOOR + 4, DENOM_TEXT[i], { shadow: C.shadow });
     });
 
     // Tubo de la semana, vacío
@@ -398,8 +407,9 @@ export class Pachinko implements Design {
     const settings = this.ctx?.settings;
     if (!snap || !settings) return;
     const totals = periodTotals(snap, settings.period);
-    engrave(g, `${PERIOD_LABEL[settings.period]} ${formatMoney(totals.costUsd, settings)}`, x + 5, y + 5, BRASS.ink);
-    const tokens = `${formatTokens(totals.totalTokens)} TOK`;
+    const money = `${PERIOD_LABEL[settings.period]} ${formatMoney(totals.costUsd, settings)}`;
+    engrave(g, money, x + 5, y + 5, BRASS.ink);
+    const tokens = tokensLabel(totals.totalTokens, w - 15 - textWidth(money));
     engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 5, "#4a3210");
   }
 }

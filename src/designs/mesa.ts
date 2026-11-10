@@ -7,11 +7,12 @@
 import {
   PERIOD_LABEL,
   STATUS_TEXT,
+  statusLine,
   bankUrgency,
   bankValue,
   formatMoney,
-  formatReset,
-  formatTokens,
+  resetLabel,
+  tokensLabel,
   periodTotals,
 } from "../core/format";
 import { CHIP_DIMS, type PaletteName, chipSprites, drawChip } from "../core/chips";
@@ -178,9 +179,13 @@ export class Mesa implements Design {
     g.drawImage(layer("mesa:fondo", W, H, (b) => this.drawTable(b)), 0, 0);
     this.drawSign(g, plan?.sevenDay, plan?.status, snap?.ghost ?? false);
 
-    // Pozo
+    // Pozo, con el valor impreso bajo cada casilla
     const period = settings?.period ?? "today";
     drawText(g, `POZO ${PERIOD_LABEL[period]}`, 9, 34, C.dim);
+    DENOMS.forEach((d, i) => {
+      const cx = POT_X(i) + 9;
+      drawText(g, d.label, cx - Math.floor(textWidth(d.label) / 2), POT_BASE + 3, C.printText);
+    });
     for (const s of this.pot) {
       const extra = s.count - s.maxVisible;
       if (extra > 0) {
@@ -205,12 +210,8 @@ export class Mesa implements Design {
     drawWoodFrame(g, W, H, C.wood);
     drawFelt(g, 5, 5, W - 10, H - 10, C.felt);
 
-    // Casillas del pozo, impresas en el paño con su valor.
-    DENOMS.forEach((d, i) => {
-      const cx = POT_X(i) + 9;
-      ring(g, cx, POT_BASE - 3, 20, 8, C.print);
-      drawText(g, d.label, cx - Math.floor(textWidth(d.label) / 2), POT_BASE + 3, C.printText);
-    });
+    // Casillas del pozo, impresas en el paño (su valor se escribe en cada fotograma).
+    DENOMS.forEach((_, i) => ring(g, POT_X(i) + 9, POT_BASE - 3, 20, 8, C.print));
 
     // Línea de apuestas
     g.fillStyle = C.line;
@@ -230,7 +231,7 @@ export class Mesa implements Design {
         rect(b, x + 3, y + 3, w - 6, 2, C.signLight);
         rect(b, x + 3, y + h - 4, w - 6, 1, C.signDark);
         const logo = "CLAUPIER";
-        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big")) / 2), y + 4, LOGO_GRADIENT, { font: "big", shadow: C.signDark });
+        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big", true)) / 2), y + 4, LOGO_GRADIENT, { font: "big", shadow: C.signDark });
       }),
       0,
       0,
@@ -244,13 +245,13 @@ export class Mesa implements Design {
     const v = bankValue(week, shows);
     const parts: [string, string][] =
       v === null
-        ? [[(STATUS_TEXT[status ?? "loading"] ?? STATUS_TEXT.loading).filter(Boolean).join(" ") || "...", C.warn]]
+        ? [[statusLine(status), C.warn]]
         : [
-            ["SEM ", C.signText],
+            ["SEMANA ", C.signText],
             [`${v}%`, [C.cream, C.warn, C.bad][bankUrgency(week)]],
           ];
-    const reset = v === null ? "" : formatReset(week?.resetsAt);
-    if (reset) parts.push([`  @${reset}`, C.signText]);
+    const reset = v === null ? "" : resetLabel(week?.resetsAt, 40);
+    if (reset) parts.push([`  ${reset}`, C.signText]);
     const total = textWidth(parts.map((p) => p[0]).join(""));
     let cx = x + Math.floor((w - total) / 2);
     for (const [text, color] of parts) {
@@ -270,8 +271,8 @@ export class Mesa implements Design {
     }
     const color = [C.cream, C.warn, C.bad][bankUrgency(win)];
     drawText(g, `${value}%`, x, 100, color, { font: "big", shadow: C.shadow });
-    const reset = formatReset(win?.resetsAt);
-    if (reset) drawText(g, `@${reset}`, x, 111, C.dim);
+    const reset = resetLabel(win?.resetsAt, W - 6 - x);
+    if (reset) drawText(g, reset, x, 111, C.dim);
   }
 
   private drawGliders(g: CanvasRenderingContext2D, now: number) {
@@ -300,9 +301,10 @@ export class Mesa implements Design {
     g.drawImage(layer("mesa:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
     const settings = this.ctx?.settings;
     if (!settings) return;
-    engrave(g, formatMoney(this.cost.shown, settings), x + 5, y + 4, BRASS.ink, { font: "big" });
+    const money = formatMoney(this.cost.shown, settings);
+    engrave(g, money, x + 5, y + 4, BRASS.ink, { font: "big" });
     const totals = snap ? periodTotals(snap, settings.period) : null;
-    const tokens = `${formatTokens(totals?.totalTokens ?? 0)} TOK`;
+    const tokens = tokensLabel(totals?.totalTokens ?? 0, w - 15 - textWidth(money, "big"));
     engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 6, "#4a3210");
   }
 }

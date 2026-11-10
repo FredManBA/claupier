@@ -254,6 +254,10 @@ body {
   color: var(--dim);
 }
 
+.field .help.warn {
+  color: var(--warn);
+}
+
 .field.off > :not(.help) {
   opacity: 0.45;
 }
@@ -379,7 +383,8 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--dim);
 }
 
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   width: 96px;
   padding: 6px 8px;
   border: 2px solid var(--ink);

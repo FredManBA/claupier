@@ -4,6 +4,7 @@
 import "./settings.css";
 import { advanceDemo, createBridge, demoSnapshot, type Bridge } from "../core/bridge";
 import { chipSprites } from "../core/chips";
+import { pixelSupports, setTextStyle } from "../core/font";
 import { hash } from "../core/paint";
 import { SoundEngine } from "../core/sound";
 import type { DeepPartial, Settings, Snapshot } from "../core/types";
@@ -44,10 +45,22 @@ type Field =
       min: number;
       max: number;
       step: number;
-      unit: string;
+      /** Unidad junto al campo; puede depender de los ajustes (el símbolo de la moneda). */
+      unit: string | ((s: Settings) => string);
       showIf?: (s: Settings) => boolean;
       /** Interruptor del que depende: se ve debajo de él y se apaga con él. */
       under?: Path;
+    }
+  | {
+      kind: "text";
+      path: Path;
+      label: string;
+      help?: string;
+      maxLength: number;
+      placeholder?: string;
+      showIf?: (s: Settings) => boolean;
+      /** Aviso que depende del valor (o `null` si no hay nada que avisar). */
+      warn?: (s: Settings) => string | null;
     }
   | { kind: "hotkey"; path: Path; label: string }
   | { kind: "anchor"; path: Path; label: string; help?: string }
@@ -81,7 +94,20 @@ const SECTIONS: Section[] = [
     icon: ["#########", "#########", "#.......#", "#.......#", "#.......#", "#.......#", "#########"],
     lead: "Tamaño, transparencia y lugar de la mesa en la pantalla.",
     fields: [
-      { kind: "choice", path: "scale", label: "Tamaño", options: [[2, "2×"], [3, "3×"], [4, "4×"]] },
+      {
+        kind: "choice",
+        path: "scale",
+        label: "Tamaño",
+        options: [[1, "1×"], [2, "2×"], [3, "3×"], [4, "4×"]],
+        help: "1× es la más chica: ideal para dejarla en una esquina mientras juegas.",
+      },
+      {
+        kind: "choice",
+        path: "textStyle",
+        label: "Texto",
+        options: [["pixel", "Pixel"], ["smooth", "Normal"]],
+        help: "Normal usa la letra de Windows, sin pixelar, para leer las cifras con más claridad. El logotipo sigue en pixel.",
+      },
       {
         kind: "range",
         path: "opacity",
@@ -178,16 +204,39 @@ const SECTIONS: Section[] = [
         show: (v) => `${v} min`,
         help: "Anthropic limita las consultas seguidas; menos de 2 minutos no está permitido.",
       },
-      { kind: "choice", path: "currency", label: "Moneda", options: [["USD", "Dólares"], ["CRC", "Colones"]] },
+      {
+        kind: "choice",
+        path: "currency",
+        label: "Moneda",
+        options: [["USD", "Dólares"], ["local", "Otra moneda"]],
+        help: "El gasto se calcula en dólares. Con otra moneda, Claupier lo convierte con el cambio que escribas.",
+      },
+      {
+        kind: "text",
+        path: "localSymbol",
+        label: "Símbolo",
+        maxLength: 4,
+        placeholder: "₡",
+        help: "Por ejemplo ₡, €, £, ¥, MX$ o S/. Hasta 4 caracteres.",
+        showIf: (s) => s.currency === "local",
+        warn: (s) => {
+          if (s.textStyle !== "pixel") return null;
+          const missing = [...s.localSymbol].filter((ch) => ch.trim() && !pixelSupports(ch));
+          return missing.length
+            ? `La letra pixel no tiene «${missing.join("")}»: elige el texto Normal en Ventana o usa otro símbolo.`
+            : null;
+        },
+      },
       {
         kind: "number",
-        path: "crcPerUsd",
-        label: "Tipo de cambio",
-        min: 1,
-        max: 5000,
-        step: 0.5,
-        unit: "₡ por $",
-        showIf: (s) => s.currency === "CRC",
+        path: "localPerUsd",
+        label: "1 dólar vale",
+        min: 0.0001,
+        max: 1_000_000,
+        step: 0.01,
+        unit: (s) => s.localSymbol || "¤",
+        help: "Cuántas unidades de tu moneda compras con un dólar. Escríbelo a mano y actualízalo cuando cambie.",
+        showIf: (s) => s.currency === "local",
       },
     ],
   },
@@ -279,6 +328,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 const refreshers: (() => void)[] = [];
 
 function refreshAll() {
+  setTextStyle(settings.textStyle);
   refreshers.forEach((r) => r());
 }
 
@@ -346,7 +396,8 @@ function renderField(f: Field): HTMLElement {
     }
     case "number": {
       const input = el("input", { type: "number", min: String(f.min), max: String(f.max), step: String(f.step) });
-      const wrap = el("span", { className: "number" }, input, f.unit);
+      const unit = el("span", { className: "unit" });
+      const wrap = el("span", { className: "number" }, input, unit);
       input.addEventListener("change", () => {
         const v = Number(input.value);
         // Un campo vacío o inválido vuelve al valor guardado en vez de guardar un 0.
@@ -361,10 +412,35 @@ function renderField(f: Field): HTMLElement {
       if (f.under) row.classList.add("sub");
       refreshers.push(() => {
         if (document.activeElement !== input) input.value = String(get(f.path));
+        unit.textContent = typeof f.unit === "function" ? f.unit(settings) : f.unit;
         row.hidden = f.showIf ? !f.showIf(settings) : false;
         const off = f.under ? !get(f.under) : false;
         row.classList.toggle("off", off);
         input.disabled = off;
+      });
+      return row;
+    }
+    case "text": {
+      const input = el("input", { type: "text", maxLength: f.maxLength, placeholder: f.placeholder ?? "", spellcheck: false });
+      input.autocomplete = "off";
+      const row = fieldRow(f.label, input, f.help, id);
+      const warning = el("p", { className: "help warn" });
+      warning.setAttribute("role", "status");
+      row.append(warning);
+      input.addEventListener("change", () => {
+        const v = input.value.trim();
+        if (!v) {
+          input.value = String(get(f.path));
+          return;
+        }
+        void save(f.path, v);
+      });
+      refreshers.push(() => {
+        if (document.activeElement !== input) input.value = String(get(f.path));
+        row.hidden = f.showIf ? !f.showIf(settings) : false;
+        const text = f.warn?.(settings) ?? null;
+        warning.textContent = text ?? "";
+        warning.hidden = !text;
       });
       return row;
     }
@@ -462,7 +538,7 @@ function keyName(e: KeyboardEvent): string | null {
 
 /** Tamaño del escenario de cada tarjeta, en píxeles CSS. La píldora va a lo ancho. */
 const STAGE = { w: 232, h: 336 };
-const STAGE_WIDE = { w: 380, h: 84 };
+const STAGE_WIDE = { w: 400, h: 84 };
 
 function renderDesigns(): HTMLElement {
   const grid = el("div", { className: "designs" });
@@ -481,10 +557,18 @@ function renderDesigns(): HTMLElement {
     const canvas = el("canvas");
     const stage = el("div", { className: "stage" }, canvas);
     const design = info.create();
-    // La escala entera más grande que quepa, en píxeles físicos, para que se vea nítido.
+    // La escala entera más grande que quepa, en píxeles físicos, para que se vea
+    // nítido. Se recalcula con el ancho real de la tarjeta (la ventana se puede
+    // estrechar hasta 640 px).
     const box = wide ? STAGE_WIDE : STAGE;
-    const k = Math.max(1, Math.floor(Math.min(box.w / design.width, box.h / design.height) * dpr));
-    views.push(new DesignView(canvas, design, k / dpr));
+    const scaleFor = (w: number) =>
+      Math.max(1, Math.floor(Math.min(w / design.width, box.h / design.height) * dpr)) / dpr;
+    const view = new DesignView(canvas, design, scaleFor(box.w));
+    views.push(view);
+    new ResizeObserver(() => {
+      const room = Math.min(box.w, stage.clientWidth - 16);
+      if (room > 0) view.setScale(scaleFor(room));
+    }).observe(stage);
     card.append(
       stage,
       el("div", { className: "head" }, el("strong", { textContent: info.name }), el("em", { className: "badge", textContent: "En uso" })),

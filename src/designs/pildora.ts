@@ -1,9 +1,9 @@
 // Píldora compacta: una sola fila, pensada para dejarla encima de un juego.
-//   [ficha] 73% @2H17 ┆ SEM 58% ┆ [ficha] $59.31   ●
+//   [ficha] 73% @2h 17m ┆ SEM 58% ┆ [ficha] $59.31   ●
 // Las cifras que importan (tu banca y el dinero) van en la fuente grande.
 
 import { CountUp } from "../core/anim";
-import { STATUS_TEXT, bankUrgency, bankValue, formatMoney, formatMoneyShort, formatReset, periodTotals } from "../core/format";
+import { bankUrgency, bankValue, formatMoney, formatMoneyShort, periodTotals, resetForms, statusLine } from "../core/format";
 import { type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
 import { BRASS, drawGhost, drawLed, layer, rect, rounded } from "../core/paint";
@@ -11,7 +11,7 @@ import { DENOMS, chipsFor } from "../core/stack";
 import type { Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
-const W = 170;
+const W = 196;
 const H = 18;
 const FLIP_MS = 520;
 const BIG_Y = 6;
@@ -96,26 +96,28 @@ export class Pildora implements Design {
     const bank = bankValue(plan?.fiveHour, shows);
     const week = bankValue(plan?.sevenDay, shows);
     const weekText = week === null ? "..." : `${week}%`;
-    const bankText = bank === null ? STATUS_TEXT[plan?.status ?? "loading"]?.[0] || "..." : `${bank}%`;
+    const bankText = bank === null ? statusLine(plan?.status) : `${bank}%`;
     const bankW = bank === null ? textWidth(bankText) + 5 : textWidth(bankText, "big") + 3;
-    const resetText = bank === null ? "" : formatReset(plan?.fiveHour?.resetsAt);
-    const resetW = textWidth(`@${resetText}`) + 5;
     /** Lo que ocupa la cuenta atrás (o el hueco que deja si no va). */
-    const resetSpace = (show: boolean) => (bank === null ? 0 : show && resetText ? resetW : 2);
+    const resetSpace = (text: string) => (bank === null ? 0 : text ? textWidth(text) + 5 : 2);
 
     // Todo tiene que acabar antes del piloto (o del fantasma, si se ve). Si no
-    // cabe, primero se quitan los centavos y después la cuenta atrás.
+    // cabe, la cuenta atrás se compacta («@2h18m», «@2h») antes de quitar los
+    // centavos, y solo al final desaparece.
     const limit = snap?.ghost ? LED_X - 10 : LED_X - 2;
     const fixed = 6 + 15 + bankW + 5 + textWidth("SEM") + 3 + textWidth(weekText) + 5 + 5 + 15;
-    const options = settings
-      ? [
-          { money: formatMoney(this.cost.shown, settings), reset: true },
-          { money: formatMoneyShort(this.cost.shown, settings), reset: true },
-          { money: formatMoneyShort(this.cost.shown, settings), reset: false },
-        ]
-      : [{ money: "", reset: true }];
+    const resets = bank === null ? [] : resetForms(plan?.fiveHour?.resetsAt).filter((t) => t.startsWith("@"));
+    const full = settings ? formatMoney(this.cost.shown, settings) : "";
+    const short = settings ? formatMoneyShort(this.cost.shown, settings) : "";
+    const options = [
+      ...resets.slice(0, 2).flatMap((reset) => [{ money: full, reset }]),
+      ...resets.slice(0, 2).flatMap((reset) => [{ money: short, reset }]),
+      ...resets.slice(2).flatMap((reset) => [{ money: full, reset }, { money: short, reset }]),
+      { money: full, reset: "" },
+      { money: short, reset: "" },
+    ];
     const fits = (o: (typeof options)[number]) => fixed + resetSpace(o.reset) + textWidth(o.money, "big") <= limit;
-    const { money, reset: showReset } = options.find(fits) ?? options[options.length - 1];
+    const { money, reset: resetText } = options.find(fits) ?? options[options.length - 1];
 
     let x = 6;
 
@@ -131,8 +133,8 @@ export class Pildora implements Design {
       drawText(g, bankText, x, BIG_Y, tone(urgency), { font: "big", ...shadow });
     }
     x += bankW;
-    if (bank !== null && resetText && showReset) drawText(g, `@${resetText}`, x, SMALL_Y, C.dim, shadow);
-    x += resetSpace(showReset);
+    if (bank !== null && resetText) drawText(g, resetText, x, SMALL_Y, C.dim, shadow);
+    x += resetSpace(resetText);
     x = this.separator(g, x);
 
     // Semana

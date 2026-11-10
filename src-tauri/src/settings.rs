@@ -11,6 +11,8 @@ pub const DESIGNS: &[&str] = &["mesa", "pildora", "tragamonedas", "pachinko"];
 const ANCHORS: &[&str] = &["free", "top-left", "top-right", "bottom-left", "bottom-right"];
 /// Ctrl+Shift+Alt+Super y una tecla como «MediaPlayPause» caben de sobra.
 const MAX_HOTKEY_LEN: usize = 48;
+/// «MX$», «CHF» o «S/» caben; más no entra en las placas.
+const MAX_SYMBOL_CHARS: usize = 4;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -59,8 +61,10 @@ impl Default for Sound {
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub design: String,
-    /// Escala de los píxeles: 2, 3 o 4.
+    /// Escala de los píxeles: de 1 a 4.
     pub scale: u8,
+    /// "pixel" o "smooth" (texto normal, sin pixelar).
+    pub text_style: String,
     /// 0,3 a 1.
     pub opacity: f64,
     pub anchor: String,
@@ -76,10 +80,14 @@ pub struct Settings {
     /// "today", "window5h" o "week".
     pub period: String,
     pub plan_poll_minutes: u32,
-    /// "USD" o "CRC".
+    /// "USD" o "local" (otra moneda, con su símbolo y su cambio).
+    /// Los archivos viejos dicen "CRC": se leen como "local" con ₡.
     pub currency: String,
-    /// Colones por dólar, escrito a mano.
-    pub crc_per_usd: f64,
+    /// Símbolo de la otra moneda, como «₡», «€» o «MX$».
+    pub local_symbol: String,
+    /// Cuánto vale un dólar en la otra moneda, escrito a mano.
+    #[serde(alias = "crcPerUsd")]
+    pub local_per_usd: f64,
     /// "full", "reduced" u "off".
     pub motion: String,
     pub sound: Sound,
@@ -90,6 +98,7 @@ impl Default for Settings {
         Self {
             design: "mesa".into(),
             scale: 3,
+            text_style: "pixel".into(),
             opacity: 1.0,
             anchor: "free".into(),
             always_on_top: true,
@@ -103,7 +112,8 @@ impl Default for Settings {
             period: "today".into(),
             plan_poll_minutes: 3,
             currency: "USD".into(),
-            crc_per_usd: 505.0,
+            local_symbol: "₡".into(),
+            local_per_usd: 505.0,
             motion: "full".into(),
             sound: Sound::default(),
         }
@@ -125,14 +135,21 @@ impl Settings {
         one_of(&mut self.anchor, ANCHORS, &d.anchor);
         one_of(&mut self.bank_shows, &["left", "used"], &d.bank_shows);
         one_of(&mut self.period, &["today", "window5h", "week"], &d.period);
-        one_of(&mut self.currency, &["USD", "CRC"], &d.currency);
+        if self.currency == "CRC" {
+            self.currency = "local".into();
+            self.local_symbol = "₡".into();
+        }
+        one_of(&mut self.currency, &["USD", "local"], &d.currency);
         one_of(&mut self.motion, &["full", "reduced", "off"], &d.motion);
-        self.scale = self.scale.clamp(2, 4);
+        one_of(&mut self.text_style, &["pixel", "smooth"], &d.text_style);
+        self.scale = self.scale.clamp(1, 4);
         self.opacity = if self.opacity.is_finite() { self.opacity.clamp(0.3, 1.0) } else { 1.0 };
         self.plan_poll_minutes = self.plan_poll_minutes.clamp(2, 30);
-        if !self.crc_per_usd.is_finite() || self.crc_per_usd <= 0.0 {
-            self.crc_per_usd = d.crc_per_usd;
+        if !self.local_per_usd.is_finite() || self.local_per_usd <= 0.0 {
+            self.local_per_usd = d.local_per_usd;
         }
+        let symbol: String = self.local_symbol.trim().chars().filter(|c| !c.is_control()).take(MAX_SYMBOL_CHARS).collect();
+        self.local_symbol = if symbol.is_empty() { d.local_symbol } else { symbol };
         let a = &mut self.alerts;
         a.five_hour_below = a.five_hour_below.clamp(1, 90);
         a.week_below = a.week_below.clamp(1, 90);
@@ -240,6 +257,26 @@ mod tests {
         assert_eq!(s.opacity, 0.3);
         assert_eq!(s.design, "mesa");
         assert_eq!(s.plan_poll_minutes, 2);
+    }
+
+    #[test]
+    fn los_colones_de_antes_pasan_a_otra_moneda() {
+        let mut s: Settings = serde_json::from_str(r#"{"currency":"CRC","crcPerUsd":512.5}"#).unwrap();
+        s.sanitize();
+        assert_eq!(s.currency, "local");
+        assert_eq!(s.local_symbol, "₡");
+        assert_eq!(s.local_per_usd, 512.5);
+    }
+
+    #[test]
+    fn simbolo_de_moneda_corto_y_sin_controles() {
+        let mut s = Settings { local_symbol: "  MX$\u{7}XYZ ".into(), scale: 0, ..Default::default() };
+        s.sanitize();
+        assert_eq!(s.local_symbol, "MX$X");
+        assert_eq!(s.scale, 1, "1× es el tamaño más chico");
+        let mut vacio = Settings { local_symbol: "   ".into(), ..Default::default() };
+        vacio.sanitize();
+        assert_eq!(vacio.local_symbol, "₡");
     }
 
     #[test]

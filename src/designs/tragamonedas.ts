@@ -6,13 +6,13 @@
 
 import {
   PERIOD_LABEL,
-  STATUS_TEXT,
+  STATUS_SHORT,
   bankUrgency,
   bankValue,
   formatMoney,
   formatMoneyShort,
-  formatReset,
-  formatTokens,
+  resetLabels,
+  tokensLabel,
   periodTotals,
 } from "../core/format";
 import { BAG_H, BAG_W, COINS_PER_BAG, type CoinSpot, SPIN, bagSprite, coinSprite, layoutHeap } from "../core/coins";
@@ -146,7 +146,7 @@ export class Tragamonedas implements Design {
   setSnapshot(snap: Snapshot, ctx: DesignContext, now: number, first: boolean) {
     this.ctx = ctx;
     const s = ctx.settings;
-    const statusWord = STATUS_TEXT[snap.plan.status]?.[0] || "...";
+    const statusWord = STATUS_SHORT[snap.plan.status] || "...";
     const five = bankValue(snap.plan.fiveHour, s.bankShows);
     const week = bankValue(snap.plan.sevenDay, s.bankShows);
     const cost = periodTotals(snap, s.period).costUsd;
@@ -304,14 +304,16 @@ export class Tragamonedas implements Design {
     const period = settings?.period ?? "today";
     const labels = ["5H", "SEM", PERIOD_LABEL[period]];
     const subs = [
-      formatReset(snap?.plan.fiveHour?.resetsAt),
-      formatReset(snap?.plan.sevenDay?.resetsAt),
-      snap && settings ? formatTokens(periodTotals(snap, period).totalTokens) : "",
+      ...resetLabels([
+        { iso: snap?.plan.fiveHour?.resetsAt, room: REEL_W - 1 },
+        { iso: snap?.plan.sevenDay?.resetsAt, room: REEL_W - 1 },
+      ]),
+      snap && settings ? tokensLabel(periodTotals(snap, period).totalTokens, REEL_W) : "",
     ];
     REEL_X.forEach((x, i) => {
       const center = (t: string) => x + Math.floor((REEL_W - textWidth(t)) / 2);
       drawText(g, labels[i], center(labels[i]), 66, C.cream, { shadow: C.shadow });
-      const sub = i < 2 && subs[i] ? `@${subs[i]}` : subs[i];
+      const sub = subs[i];
       if (sub) drawText(g, sub, center(sub), 73, C.dim, { shadow: C.shadow });
     });
 
@@ -346,7 +348,7 @@ export class Tragamonedas implements Design {
     rect(g, s.x + 3, s.y + 3, s.w - 6, s.h - 6, C.panel);
     rect(g, s.x + 3, s.y + 3, s.w - 6, 1, C.panelLight);
     const logo = "CLAUPIER";
-    drawText(g, logo, s.x + Math.floor((s.w - textWidth(logo, "big")) / 2), s.y + 4, LOGO_GRADIENT, { font: "big", shadow: "#120305" });
+    drawText(g, logo, s.x + Math.floor((s.w - textWidth(logo, "big", true)) / 2), s.y + 4, LOGO_GRADIENT, { font: "big", shadow: "#120305" });
 
     // Ventana de los rodillos: marco de latón y cristal
     const wx = REEL_X[0] - 3;
@@ -423,8 +425,9 @@ export class Tragamonedas implements Design {
       g.clip();
       const font = (t: string) => (textWidth(t, "big") <= REEL_W - 2 ? "big" : "small");
       const center = (t: string) => x + Math.floor((REEL_W - textWidth(t, font(t))) / 2);
+      const clip = { x, y: REEL_Y, w: REEL_W, h: REEL_H };
       const put = (t: string, y: number, color: string) =>
-        drawText(g, t, center(t), font(t) === "big" ? y : y + 1, color, { font: font(t) });
+        drawText(g, t, center(t), font(t) === "big" ? y : y + 1, color, { font: font(t), clip });
       const spinning = reel.spinStart !== undefined && now >= reel.spinStart;
       if (spinning) {
         const t = Math.min(1, (now - reel.spinStart!) / SPIN_MS);
@@ -555,8 +558,9 @@ export class Tragamonedas implements Design {
     const settings = this.ctx?.settings;
     if (!snap || !settings) return;
     const totals = periodTotals(snap, settings.period);
-    engrave(g, formatMoney(totals.costUsd, settings), x + 5, y + 4, BRASS.ink, { font: "big" });
-    const tokens = `${formatTokens(totals.totalTokens)} TOK`;
+    const money = formatMoney(totals.costUsd, settings);
+    engrave(g, money, x + 5, y + 4, BRASS.ink, { font: "big" });
+    const tokens = tokensLabel(totals.totalTokens, w - 15 - textWidth(money, "big"));
     engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 5, "#4a3210");
   }
 }

@@ -1,6 +1,7 @@
 // La ventana principal: muestra el diseño elegido con los datos del backend.
 
 import { createBridge, inTauri } from "./core/bridge";
+import { setTextStyle } from "./core/font";
 import { SoundEngine } from "./core/sound";
 import type { Settings, Snapshot } from "./core/types";
 import { DesignView, effectiveMotion } from "./core/view";
@@ -49,6 +50,7 @@ async function start() {
   await bridge.onSettings(async (next) => {
     const prev = settings;
     settings = next;
+    setTextStyle(settings.textStyle);
     if (!view) return;
     applyLook();
     if (next.design !== prev.design) {
@@ -66,6 +68,7 @@ async function start() {
   });
   settings = await bridge.getSettings();
   snap = await bridge.getSnapshot();
+  setTextStyle(settings.textStyle);
 
   view = new DesignView(canvas, createDesign(settings.design), settings.scale);
   applyLook();

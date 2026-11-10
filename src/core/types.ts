@@ -37,11 +37,14 @@ export type DesignId = "mesa" | "pildora" | "tragamonedas" | "pachinko";
 export type Anchor = "free" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type Period = "today" | "window5h" | "week";
 export type Motion = "full" | "reduced" | "off";
+export type TextStyle = "pixel" | "smooth";
 
 /** Espejo de `src-tauri/src/settings.rs`. */
 export interface Settings {
   design: DesignId;
+  /** Escala de los píxeles, de 1 a 4. */
   scale: number;
+  textStyle: TextStyle;
   opacity: number;
   anchor: Anchor;
   alwaysOnTop: boolean;
@@ -62,8 +65,11 @@ export interface Settings {
   bankShows: "left" | "used";
   period: Period;
   planPollMinutes: number;
-  currency: "USD" | "CRC";
-  crcPerUsd: number;
+  /** "USD" o "local": otra moneda con su símbolo y su cambio. */
+  currency: "USD" | "local";
+  localSymbol: string;
+  /** Cuánto vale un dólar en la otra moneda. */
+  localPerUsd: number;
   motion: Motion;
   sound: { enabled: boolean; volume: number; muteInGame: boolean };
 }
@@ -71,6 +77,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   design: "mesa",
   scale: 3,
+  textStyle: "pixel",
   opacity: 1,
   anchor: "free",
   alwaysOnTop: true,
@@ -92,7 +99,8 @@ export const DEFAULT_SETTINGS: Settings = {
   period: "today",
   planPollMinutes: 3,
   currency: "USD",
-  crcPerUsd: 505,
+  localSymbol: "₡",
+  localPerUsd: 505,
   motion: "full",
   sound: { enabled: false, volume: 0.5, muteInGame: true },
 };

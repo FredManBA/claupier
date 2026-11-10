@@ -113,6 +113,9 @@ function demoBridge(): Bridge {
   if (params.has("scale")) fromUrl.scale = Number(params.get("scale"));
   if (params.has("period")) fromUrl.period = params.get("period") as Settings["period"];
   if (params.has("currency")) fromUrl.currency = params.get("currency") as Settings["currency"];
+  if (params.has("symbol")) fromUrl.localSymbol = params.get("symbol")!;
+  if (params.has("rate")) fromUrl.localPerUsd = Number(params.get("rate"));
+  if (params.has("text")) fromUrl.textStyle = params.get("text") as Settings["textStyle"];
   if (params.has("motion")) fromUrl.motion = params.get("motion") as Settings["motion"];
   if (params.has("bank")) fromUrl.bankShows = params.get("bank") as Settings["bankShows"];
   settings = mergeDeep(settings, fromUrl);

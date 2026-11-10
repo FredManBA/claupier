@@ -3,6 +3,7 @@
 // Lo usan la mesa (main.ts) y las vistas previas de los ajustes.
 
 import type { Design, DesignContext } from "../designs/design";
+import { beginTextCapture, endTextCapture, paintTextCommands } from "./font";
 import type { Motion, Snapshot } from "./types";
 
 /** Si Windows pide reducir el movimiento, la animación completa pasa a reducida. */
@@ -81,9 +82,17 @@ export class DesignView {
   private frame(now: number) {
     this.frameQueued = false;
     const busy = this.design.update(now);
-    this.design.draw(this.lowCtx, now);
+    // Con texto normal, el diseño apunta sus textos y se pintan aquí encima a
+    // resolución real, en vez de escalar los píxeles.
+    const texts = beginTextCapture(this.lowCtx);
+    try {
+      this.design.draw(this.lowCtx, now);
+    } finally {
+      endTextCapture();
+    }
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.drawImage(this.low, 0, 0, this.canvas.width, this.canvas.height);
+    paintTextCommands(this.ctx, texts, this.k);
 
     if (busy) {
       this.requestFrame();
