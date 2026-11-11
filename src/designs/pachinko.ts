@@ -187,7 +187,7 @@ export class Pachinko implements Design {
         // Entró en su casilla y se queda ahí.
         ball.landed = true;
         this.counts[ball.pocket]++;
-        this.ctx?.cue("chip");
+        this.ctx?.cue("pocket");
       }
     }
     this.balls = this.balls.filter((b) => !b.landed);

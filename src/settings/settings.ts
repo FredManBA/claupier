@@ -8,6 +8,7 @@ import { pixelSupports, setTextStyle } from "../core/font";
 import { hash } from "../core/paint";
 import { SoundEngine } from "../core/sound";
 import type { DeepPartial, Settings, Snapshot } from "../core/types";
+import type { Cue } from "../designs/design";
 import { DesignView, effectiveMotion } from "../core/view";
 import { DESIGN_LIST } from "../designs/index";
 
@@ -244,7 +245,7 @@ const SECTIONS: Section[] = [
     id: "sonido",
     title: "Sonido",
     icon: ["...#.....", "..##..#..", "####...#.", "####.#.#.", "####...#.", "..##..#..", "...#....."],
-    lead: "Sonidos suaves generados en el momento, sin agudos. Vienen apagados.",
+    lead: "Sonidos suaves generados en el momento, sin agudos. Cada diseño tiene los suyos. Vienen apagados.",
     fields: [
       { kind: "switch", path: "sound.enabled", label: "Activar sonido" },
       {
@@ -264,15 +265,33 @@ const SECTIONS: Section[] = [
         label: "Silenciar en juego",
         help: "Con una app en pantalla completa o con Windows en No molestar.",
       },
-      { kind: "action", label: "Probar", button: "Escuchar el sonido", run: () => playChips() },
+      {
+        kind: "action",
+        label: "Probar",
+        button: "Escuchar el diseño elegido",
+        help: "Mesa: fichas y su roce. Píldora: un toque mínimo. Tragamonedas: palanca, rodillos y monedas. Pachinko: bolas y casillas.",
+        run: () => playDesignSounds(),
+      },
     ],
   },
 ];
 
-/** Tres fichas cayendo sobre la pila, con el volumen elegido. */
-function playChips() {
+/** Una muestra de los sonidos del diseño elegido, con el volumen elegido. */
+function playDesignSounds() {
   sound.configure(settings.sound, false);
-  [0, 170, 320].forEach((delay) => window.setTimeout(() => sound.preview("chip"), delay));
+  const demos: Record<Settings["design"], [number, Cue, number?][]> = {
+    mesa: [[0, "chip"], [170, "chip"], [320, "chip"], [620, "glide"]],
+    pildora: [[0, "tick"], [260, "tick"]],
+    tragamonedas: [
+      [0, "lever"],
+      ...[200, 260, 320, 380, 440, 520, 620].map((ms): [number, Cue] => [ms, "reel"]),
+      [820, "coin", 1.12],
+      [910, "coin", 0.9],
+      [1000, "coin", 0.72],
+    ],
+    pachinko: [...[0, 80, 160, 240, 320, 400].map((ms): [number, Cue] => [ms, "ball"]), [560, "pocket"]],
+  };
+  for (const [delay, cue, pitch] of demos[settings.design]) window.setTimeout(() => sound.preview(cue, pitch), delay);
 }
 
 // ── Utilidades ─────────────────────────────────────────────────────────────

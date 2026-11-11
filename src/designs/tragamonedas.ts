@@ -88,6 +88,7 @@ const MAX_QUEUE = 16;
 // El montón se apoya justo sobre el labio de la bandeja, para que no lo tape.
 const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR - 1, HEAP_W / 2, "big").map((s) => ({ ...s, x: s.x + HEAP_X }));
 const COIN_COLORS = DENOMS.map((d) => d.palette as CoinPalette);
+const COIN_PITCH = [1.12, 1, 0.9, 0.8, 0.72];
 
 interface Reel {
   value: string;
@@ -269,7 +270,8 @@ export class Tragamonedas implements Design {
     for (const coin of this.flying) {
       if (!coin.landed && now - coin.start >= FALL_MS) {
         coin.landed = true;
-        this.ctx?.cue("coin");
+        // Más grave cuanto más vale la moneda.
+        this.ctx?.cue("coin", COIN_PITCH[coin.denom]);
       }
     }
     while (this.flying.length > 0 && now - this.flying[0].start >= FALL_MS + SETTLE_MS) {

@@ -54,7 +54,7 @@ export class Pildora implements Design {
     if (animate && bank !== this.lastBank && this.lastBank !== null) this.flips.bank = now;
     if (animate && Math.floor(cost) > Math.floor(this.cost.target)) {
       this.flips.money = now;
-      ctx.cue("chip");
+      ctx.cue("tick");
     }
     this.lastBank = bank;
 

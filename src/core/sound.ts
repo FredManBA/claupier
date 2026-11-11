@@ -7,7 +7,16 @@ import type { Cue } from "../designs/design";
 import type { Settings } from "./types";
 
 /** Separación mínima entre dos sonidos iguales, para que no se amontonen. */
-const MIN_GAP_MS: Record<Cue, number> = { chip: 45, coin: 45, reel: 35, lever: 300, ball: 70, bag: 300 };
+const MIN_GAP_MS: Record<Cue, number> = {
+  chip: 45,
+  glide: 200,
+  tick: 80,
+  coin: 45,
+  reel: 35,
+  lever: 300,
+  ball: 70,
+  pocket: 60,
+};
 
 /** [frecuencia Hz, ganancia relativa, caída en s] de cada resonancia. */
 type Mode = [number, number, number];
@@ -79,17 +88,17 @@ export class SoundEngine {
   }
 
   /** Suena aunque el sonido esté apagado: para probar desde los ajustes. */
-  preview(cue: Cue) {
+  preview(cue: Cue, pitch = 1) {
     const prev = { enabled: this.enabled, quiet: this.quiet };
     this.enabled = true;
     this.quiet = false;
     this.last[cue] = undefined;
-    this.play(cue);
+    this.play(cue, pitch);
     this.enabled = prev.enabled;
     this.quiet = prev.quiet;
   }
 
-  play(cue: Cue) {
+  play(cue: Cue, pitch = 1) {
     if (!this.audible) return;
     const now = performance.now();
     if (now - (this.last[cue] ?? -Infinity) < MIN_GAP_MS[cue]) return;
@@ -99,12 +108,29 @@ export class SoundEngine {
     if (!ctx || !this.out) return;
     if (ctx.state === "suspended") void ctx.resume();
     const t = ctx.currentTime + 0.005;
-    const jitter = 0.95 + Math.random() * 0.1;
+    const jitter = (0.95 + Math.random() * 0.1) * pitch;
 
     switch (cue) {
       case "chip":
-      case "coin":
         this.coin(t, COIN_BASE_HZ * jitter);
+        break;
+      case "coin":
+        // Moneda de la tragamonedas: la misma, un poco más corta y con eco de bandeja.
+        this.coin(t, COIN_BASE_HZ * 1.05 * jitter, 0.9);
+        this.noiseHit(t + 0.012, 0.03, 1400, 1.2, 0.05);
+        break;
+      case "glide":
+        // Fichas que se deslizan sobre el paño: un roce suave que baja.
+        this.sweep(t, 0.22, 1100, 520, 0.09);
+        break;
+      case "tick":
+        // Píldora: un toque mínimo, casi un clic de moneda lejana.
+        this.modal(t, [[880 * jitter, 1, 0.018], [2420 * jitter, 0.25, 0.008]], 0.12);
+        break;
+      case "pocket":
+        // La bola entra en su casilla: un golpe sordo de madera y metal.
+        this.modal(t, [[520 * jitter, 1, 0.045], [1310 * jitter, 0.3, 0.02]], 0.2);
+        this.noiseHit(t, 0.02, 700, 1, 0.08);
         break;
       case "reel":
         this.tone(t, "square", 240 * jitter, 200 * jitter, 0.018, 0.05);
@@ -115,10 +141,6 @@ export class SoundEngine {
         break;
       case "ball":
         this.modal(t, [[1320 * jitter, 1, 0.02], [2050 * jitter, 0.4, 0.012]], 0.18);
-        break;
-      case "bag":
-        // «Cha-ching»: tres monedas seguidas que caen en la bolsa.
-        [0, 0.06, 0.12].forEach((dt, i) => this.coin(t + dt, COIN_BASE_HZ * [0.92, 1, 0.86][i] * jitter, 1 - i * 0.2));
         break;
     }
   }
@@ -158,6 +180,25 @@ export class SoundEngine {
     osc.connect(env).connect(this.out!);
     osc.start(t);
     osc.stop(t + dur + 0.02);
+  }
+
+  /** Ruido filtrado cuya frecuencia baja de `from` a `to`: un roce. */
+  private sweep(t: number, dur: number, from: number, to: number, gain: number) {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.Q.value = 1.4;
+    band.frequency.setValueAtTime(from, t);
+    band.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(gain, t + dur * 0.3);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(band).connect(env).connect(this.out!);
+    src.start(t, Math.random() * 0.02);
+    src.stop(t + dur + 0.02);
   }
 
   private noiseHit(t: number, dur: number, freq: number, q: number, gain: number) {

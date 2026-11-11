@@ -101,6 +101,7 @@ export class Mesa implements Design {
         this.gliders.push({ from: this.chipAt(k), start: now + j * GLIDE_STAGGER, palette, landed: false });
       }
       this.setBank(target, now, "instant");
+      ctx.cue("glide");
     } else {
       if (motion !== "full") this.gliders = [];
       this.setBank(target, now, motion);

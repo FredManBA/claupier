@@ -24,7 +24,7 @@ async function start() {
   const context = (): DesignContext => ({
     settings,
     motion: effectiveMotion(settings.motion, motionQuery.matches),
-    cue: (name) => sound.play(name),
+    cue: (name, pitch) => sound.play(name, pitch),
   });
 
   const fit = async () => {
