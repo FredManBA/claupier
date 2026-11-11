@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Nota interna para retomar el trabajo: se queda solo en local
+docs/ESTADO.md
