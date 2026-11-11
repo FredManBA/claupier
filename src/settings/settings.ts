@@ -594,12 +594,14 @@ function renderDesigns(): HTMLElement {
     // nítido. Se recalcula con el ancho real de la tarjeta (la ventana se puede
     // estrechar hasta 640 px).
     const box = wide ? STAGE_WIDE : STAGE;
+    // En pasos de un cuarto: los tamaños no enteros se suavizan un poco, pero
+    // así la vista previa aprovecha la tarjeta en vez de quedarse en 1×.
     const scaleFor = (w: number) =>
-      Math.max(1, Math.floor(Math.min(w / design.width, box.h / design.height) * dpr)) / dpr;
+      Math.max(1, Math.floor(Math.min(w / design.width, box.h / design.height) * dpr * 4) / 4) / dpr;
     const view = new DesignView(canvas, design, scaleFor(box.w));
     views.push(view);
     new ResizeObserver(() => {
-      const room = Math.min(box.w, stage.clientWidth - 16);
+      const room = Math.min(box.w, stage.clientWidth - 8);
       if (room > 0) view.setScale(scaleFor(room));
     }).observe(stage);
     card.append(

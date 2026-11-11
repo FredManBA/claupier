@@ -80,6 +80,11 @@ export const PALETTES = {
     o: "#0d1d38", b: "#3b7dce", h: "#5896de", s: "#f1e8d6", r: "#2b5d9f",
     i: "#62a0e5", l: "#93c1f2", e: "#2a5b9b", t: "#c4b7a0", d: "#1a3d6c",
   },
+  // La banca semanal de la mesa: morada, para no confundirla con la de 5 h.
+  week: {
+    o: "#1f0f33", b: "#7e4fc4", h: "#9667d6", s: "#f1e8d6", r: "#5e3a99",
+    i: "#9f72de", l: "#c3a2ef", e: "#5b3895", t: "#c4b7a0", d: "#3b2366",
+  },
   bankWarn: {
     o: "#3a2506", b: "#d6972a", h: "#e9b049", s: "#fff0cf", r: "#a9741c",
     i: "#eeba56", l: "#f8d58c", e: "#a5701a", t: "#d3bf98", d: "#6c4810",

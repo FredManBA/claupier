@@ -11,7 +11,7 @@ import {
   bankUrgency,
   bankValue,
   formatMoney,
-  resetLabel,
+  resetLabels,
   tokensLabel,
   periodTotals,
 } from "../core/format";
@@ -24,7 +24,9 @@ import { DENOMS, Stack, chipsFor } from "../core/stack";
 import type { LimitWindow, Motion, PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
-const W = 112;
+const W = 156;
+/** Mitad de la mesa: a la izquierda la banca de 5 h, a la derecha la semanal. */
+const HALF = 78;
 const H = 130;
 
 const C = {
@@ -48,13 +50,19 @@ const C = {
 
 
 // Geometría
-const SIGN = { x: 7, y: 7, w: 98, h: 24 };
+const SIGN = { x: 7, y: 7, w: W - 14, h: 24 };
 const POT_BASE = 75;
-const POT_X = (i: number) => 7 + i * 20;
+/** Las cinco casillas del pozo, centradas. */
+const POT_X0 = Math.floor((W - 98) / 2);
+const POT_X = (i: number) => POT_X0 + i * 20;
 const BANK_BASE = 122;
-const BANK_X = [8, 28];
+const BANK_X = [8, 26];
+const WEEK_X = [HALF + 3, HALF + 21];
+/** Dónde va el porcentaje de cada banca, a la derecha de sus fichas. */
+const BANK_TEXT_X = 47;
+const WEEK_TEXT_X = HALF + 42;
 /** Adonde se deslizan tus fichas: el centro del pozo. */
-const POT_CENTER = { x: 47, y: 44 };
+const POT_CENTER = { x: Math.floor(W / 2) - 9, y: 44 };
 
 const GLIDE_MS = 560;
 const GLIDE_STAGGER = 90;
@@ -74,6 +82,8 @@ export class Mesa implements Design {
 
   private pot = DENOMS.map((d, i) => new Stack(POT_X(i), POT_BASE, d.palette, 6));
   private bank = BANK_X.map((x) => new Stack(x, BANK_BASE, "bank", 5));
+  /** La banca semanal: 10 fichas moradas, una por cada 10 %. */
+  private week = WEEK_X.map((x) => new Stack(x, BANK_BASE, "week", 5));
   private snap: Snapshot | null = null;
   private ctx: DesignContext | null = null;
   /** Fichas de tu banca que se ven ahora mismo. */
@@ -108,6 +118,12 @@ export class Mesa implements Design {
       this.setBank(target, now, motion);
     }
 
+    // La semana: sus fichas aparecen o se van en su sitio.
+    const w = bankValue(snap.plan.sevenDay, shows);
+    const weekChips = w === null ? 0 : Math.max(0, Math.min(10, Math.ceil(w / 10)));
+    this.week[0].setTarget(Math.min(5, weekChips), now, motion);
+    this.week[1].setTarget(Math.max(0, weekChips - 5), now, motion);
+
     const cost = periodTotals(snap, ctx.settings.period).costUsd;
     chipsFor(cost).forEach((n, i) => this.pot[i].setTarget(n, now, motion));
     this.cost.set(cost, now, motion === "full");
@@ -126,15 +142,15 @@ export class Mesa implements Design {
     return { x: stack.x, y: stack.chipY(k % 5) };
   }
 
-  private bankPalette(win: LimitWindow | null | undefined): PaletteName {
-    return (["bank", "bankWarn", "bankBad"] as const)[bankUrgency(win)];
+  private bankPalette(win: LimitWindow | null | undefined, base: "bank" | "week" = "bank"): PaletteName {
+    return ([base, "bankWarn", "bankBad"] as const)[bankUrgency(win)];
   }
 
   // ── Animación ────────────────────────────────────────────────────────────
 
   update(now: number): boolean {
     let busy = false;
-    for (const s of [...this.pot, ...this.bank]) busy = s.update(now) || busy;
+    for (const s of [...this.pot, ...this.bank, ...this.week]) busy = s.update(now) || busy;
 
     for (const gl of this.gliders) {
       if (!gl.landed && now - gl.start >= GLIDE_MS) {
@@ -151,7 +167,7 @@ export class Mesa implements Design {
     // De vez en cuando gira la ficha de arriba de alguna pila.
     if (this.ctx?.motion === "full" && now >= this.nextFlip) {
       if (this.nextFlip !== 0) {
-        const tops = [...this.pot, ...this.bank].map((s) => s.topRestingChip()).filter((c) => c !== undefined);
+        const tops = [...this.pot, ...this.bank, ...this.week].map((s) => s.topRestingChip()).filter((c) => c !== undefined);
         const pick = tops[Math.floor(Math.random() * tops.length)];
         if (pick) {
           pick.flipStart = now;
@@ -178,7 +194,7 @@ export class Mesa implements Design {
     const shows = settings?.bankShows ?? "left";
 
     g.drawImage(layer("mesa:fondo", W, H, (b) => this.drawTable(b)), 0, 0);
-    this.drawSign(g, plan?.sevenDay, plan?.status, snap?.ghost ?? false);
+    this.drawSign(g, plan?.plan, plan?.status, snap?.ghost ?? false);
 
     // Pozo: su nombre y los tokens a la izquierda, el gasto en dorado a la derecha
     const period = settings?.period ?? "today";
@@ -203,11 +219,22 @@ export class Mesa implements Design {
       s.draw(g, now);
     }
 
-    // Tu banca
+    // Tu banca de 5 h, a la izquierda
     drawText(g, shows === "used" ? L("USADO 5H", "USED 5H") : L("TU BANCA 5H", "YOUR BANK 5H"), 9, 90, C.dim);
     const palette = this.bankPalette(plan?.fiveHour);
     for (const s of this.bank) s.draw(g, now, palette);
-    this.drawBankText(g, plan?.fiveHour, plan?.status);
+    // Los dos reinicios con la misma forma, para que se lean igual.
+    const [reset5, resetWeek] = resetLabels([
+      { iso: plan?.fiveHour?.resetsAt, room: HALF - 2 - BANK_TEXT_X },
+      { iso: plan?.sevenDay?.resetsAt, room: W - 6 - WEEK_TEXT_X },
+    ]);
+    this.drawBankText(g, plan?.fiveHour, plan?.status, BANK_TEXT_X, reset5);
+
+    // La semana, a la derecha
+    drawText(g, shows === "used" ? L("USADO SEMANA", "USED WEEK") : L("SEMANA", "WEEK"), HALF + 4, 90, C.dim);
+    const weekPalette = this.bankPalette(plan?.sevenDay, "week");
+    for (const s of this.week) s.draw(g, now, weekPalette);
+    this.drawBankText(g, plan?.sevenDay, undefined, WEEK_TEXT_X, resetWeek);
 
     this.drawGliders(g, now);
   }
@@ -220,12 +247,13 @@ export class Mesa implements Design {
     // Casillas del pozo, impresas en el paño (su valor se escribe en cada fotograma).
     DENOMS.forEach((_, i) => ring(g, POT_X(i) + 9, POT_BASE - 3, 20, 8, C.print));
 
-    // Línea de apuestas
+    // Línea de apuestas, y otra vertical entre la banca de 5 h y la semanal
     g.fillStyle = C.line;
     for (let x = 9; x < W - 9; x += 2) g.fillRect(x, 86, 1, 1);
+    for (let y = 89; y < BANK_BASE + 2; y += 2) g.fillRect(HALF, y, 1, 1);
   }
 
-  private drawSign(g: CanvasRenderingContext2D, week: LimitWindow | null | undefined, status: PlanStatus | undefined, ghost: boolean) {
+  private drawSign(g: CanvasRenderingContext2D, planName: string | null | undefined, status: PlanStatus | undefined, ghost: boolean) {
     g.drawImage(
       layer("mesa:cartel", W, 34, (b) => {
         const { x, y, w, h } = SIGN;
@@ -247,38 +275,29 @@ export class Mesa implements Design {
     drawLed(g, x + w - 10, y + 5, status);
     if (ghost) drawGhost(g, x + 6, y + 5);
 
-    // La semana, debajo del nombre
-    const shows = this.ctx?.settings.bankShows ?? "left";
-    const v = bankValue(week, shows);
-    const parts: [string, string][] =
-      v === null
-        ? [[statusLine(status), C.warn]]
-        : [
-            [L("SEMANA ", "WEEK "), C.signText],
-            [`${v}%`, [C.cream, C.warn, C.bad][bankUrgency(week)]],
-          ];
-    const reset = v === null ? "" : resetLabel(week?.resetsAt, 40);
-    if (reset) parts.push([`  ${reset}`, C.signText]);
-    const total = textWidth(parts.map((p) => p[0]).join(""));
-    let cx = x + Math.floor((w - total) / 2);
-    for (const [text, color] of parts) {
-      drawText(g, text, cx, y + 13, color, { shadow: C.signDark });
-      cx += textWidth(text) + (text.endsWith(" ") ? 0 : 1);
-    }
+    // Debajo del nombre: el plan, o el problema si no se pudo leer.
+    const ok = status === "ok";
+    const line = ok ? (planName ? `PLAN ${planName.toUpperCase()}` : "") : statusLine(status);
+    if (line) drawText(g, line, x + Math.floor((w - textWidth(line)) / 2), y + 13, ok ? C.signText : C.warn, { shadow: C.signDark });
   }
 
-  private drawBankText(g: CanvasRenderingContext2D, win: LimitWindow | null | undefined, status: string | undefined) {
-    const x = 52;
+  /** El porcentaje de una banca y su reinicio, desde `x`. */
+  private drawBankText(
+    g: CanvasRenderingContext2D,
+    win: LimitWindow | null | undefined,
+    status: string | undefined,
+    x: number,
+    reset: string,
+  ) {
     const value = bankValue(win, this.ctx?.settings.bankShows ?? "left");
     if (value === null) {
-      const [a, b] = statusText(status);
+      const [a, b] = status ? statusText(status) : ["...", ""];
       drawText(g, a || "...", x, 101, C.warn, { shadow: C.shadow });
       if (b) drawText(g, b, x, 108, C.warn, { shadow: C.shadow });
       return;
     }
     const color = [C.cream, C.warn, C.bad][bankUrgency(win)];
     drawText(g, `${value}%`, x, 100, color, { font: "big", shadow: C.shadow });
-    const reset = resetLabel(win?.resetsAt, W - 6 - x);
     if (reset) drawText(g, reset, x, 111, C.dim);
   }
 
