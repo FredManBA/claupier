@@ -7,7 +7,6 @@
 import {
   periodLabel,
   statusText,
-  statusLine,
   bankUrgency,
   bankValue,
   formatMoney,
@@ -194,7 +193,7 @@ export class Mesa implements Design {
     const shows = settings?.bankShows ?? "left";
 
     g.drawImage(layer("mesa:fondo", W, H, (b) => this.drawTable(b)), 0, 0);
-    this.drawSign(g, plan?.plan, plan?.status, snap?.ghost ?? false);
+    this.drawSign(g, plan?.status, snap?.ghost ?? false);
 
     // Pozo: su nombre y los tokens a la izquierda, el gasto en dorado a la derecha
     const period = settings?.period ?? "today";
@@ -253,7 +252,8 @@ export class Mesa implements Design {
     for (let y = 89; y < BANK_BASE + 2; y += 2) g.fillRect(HALF, y, 1, 1);
   }
 
-  private drawSign(g: CanvasRenderingContext2D, planName: string | null | undefined, status: PlanStatus | undefined, ghost: boolean) {
+  /** El cartel: solo el nombre, centrado, con el piloto de estado y el fantasma. */
+  private drawSign(g: CanvasRenderingContext2D, status: PlanStatus | undefined, ghost: boolean) {
     g.drawImage(
       layer("mesa:cartel", W, 34, (b) => {
         const { x, y, w, h } = SIGN;
@@ -266,19 +266,14 @@ export class Mesa implements Design {
         rect(b, x + 3, y + 3, w - 6, 2, C.signLight);
         rect(b, x + 3, y + h - 4, w - 6, 1, C.signDark);
         const logo = "CLAUPIER";
-        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big", true)) / 2), y + 4, LOGO_GRADIENT, { font: "big", shadow: C.signDark });
+        drawText(b, logo, x + Math.floor((w - textWidth(logo, "big", true)) / 2), y + 8, LOGO_GRADIENT, { font: "big", shadow: C.signDark });
       }),
       0,
       0,
     );
     const { x, y, w } = SIGN;
-    drawLed(g, x + w - 10, y + 5, status);
-    if (ghost) drawGhost(g, x + 6, y + 5);
-
-    // Debajo del nombre: el plan, o el problema si no se pudo leer.
-    const ok = status === "ok";
-    const line = ok ? (planName ? `PLAN ${planName.toUpperCase()}` : "") : statusLine(status);
-    if (line) drawText(g, line, x + Math.floor((w - textWidth(line)) / 2), y + 13, ok ? C.signText : C.warn, { shadow: C.signDark });
+    drawLed(g, x + w - 10, y + 10, status);
+    if (ghost) drawGhost(g, x + 6, y + 9);
   }
 
   /** El porcentaje de una banca y su reinicio, desde `x`. */
