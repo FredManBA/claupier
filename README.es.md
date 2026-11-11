@@ -5,13 +5,15 @@
 [Read in English](README.md)
 
 <p>
-  <img src="docs/screenshots/mesa.png" alt="El diseño Mesa: mesa de casino con tu banca de 5 h en fichas azules y el gasto de hoy en el pozo" height="300">
-  <img src="docs/screenshots/tragamonedas.png" alt="El diseño Tragamonedas: tres rodillos y un montón de monedas" height="300">
-  <img src="docs/screenshots/pachinko.png" alt="El diseño Pachinko: bolas que caen en la casilla de su valor" height="300">
+  <img src="docs/screenshots/es/mesa.png" alt="El diseño Mesa: tu banca de 5 h en fichas azules y el gasto de hoy en el pozo" height="260">
+  <img src="docs/screenshots/es/tragamonedas.png" alt="El diseño Tragamonedas: tres rodillos y un montón de monedas, un color por valor" height="260">
+  <img src="docs/screenshots/es/pachinko.png" alt="El diseño Pachinko: bolas que caen en la casilla de su valor" height="260">
 </p>
 <p>
-  <img src="docs/screenshots/pildora.png" alt="El diseño Píldora: una sola fila compacta" height="54">
+  <img src="docs/screenshots/es/pildora.png" alt="El diseño Píldora: una sola fila compacta" height="54">
 </p>
+
+La app está en **español e inglés**: sigue el idioma de Windows y se cambia en **Ajustes → Ventana → Idioma**.
 
 > Claupier es un proyecto independiente y no oficial. No está afiliado a Anthropic, ni lo respalda ni lo patrocina Anthropic. «Claude» y «Claude Code» son marcas de Anthropic. El nombre es un juego de palabras entre Claude y *croupier*, el crupier del casino.
 
@@ -60,21 +62,21 @@ Se eligen en **Ajustes → Diseño**, con vista previa animada.
 
 | Diseño | Qué muestra |
 |---|---|
-| **Mesa** | Tu banca de 5 h en fichas azules; cuando baja, tus fichas se deslizan al pozo. En el pozo está tu gasto en fichas de casino |
-| **Píldora** | Una sola fila compacta para dejar encima de un juego |
-| **Tragamonedas** | Tres rodillos: 5 horas, semana y dinero. Cada dólar es una moneda; cada $100, una bolsa |
-| **Pachinko** | La tolva guarda lo que te queda de las 5 horas. Cada bola cae en la casilla de su valor. El tubo de la derecha es la semana |
+| **Mesa** | Tu banca de 5 h en fichas azules; cuando baja, tus fichas se deslizan al pozo. En el pozo está tu gasto en fichas de casino, con el monto y los tokens al lado. Sonidos: fichas que caen y se deslizan |
+| **Píldora** | Una sola fila compacta para dejar encima de un juego. Sonido: un toque mínimo |
+| **Tragamonedas** | Tres rodillos: 5 horas, semana y dinero. El gasto cae por la ranura en monedas, un color por cada valor. Sonidos: palanca, rodillos y monedas (más graves cuanto más valen) |
+| **Pachinko** | La tolva guarda lo que te queda de las 5 horas. Cada bola cae en la casilla de su valor. El tubo de la derecha es la semana. Sonidos: bolas en los clavos y al entrar en la casilla |
 
-Valor de las fichas: blanca $1, roja $5, verde $25, negra $100 y **naranja $500**.
+Valor de las fichas y las monedas: blanca $1, roja $5, verde $25, negra $100 y **naranja $500**.
 
 ### Ajustes
 
-- **Ventana:** tamaño de 1× a 4×, **texto pixel o normal** (el normal usa la letra de Windows para leer mejor; el logotipo sigue en pixel), opacidad, anclar a una esquina, siempre encima y nivel de animación.
+- **Ventana:** idioma (automático, español o inglés), seis tamaños de 1× a 4×, **texto pixel o normal** (el normal usa la letra de Windows para leer mejor; el logotipo sigue en pixel), opacidad, anclar a una esquina, siempre encima y nivel de animación.
 - **Inicio:** arrancar con Windows, empezar oculta y empezar en modo fantasma.
 - **Atajos:** cambiar los dos atajos.
 - **Avisos:** notificaciones de Windows cuando la banca de 5 h o la semanal bajan de un porcentaje, cuando pasas un tope de gasto o cuando caduca la sesión. Cada aviso suena una sola vez por ventana o periodo.
 - **Datos:** mostrar lo que queda o lo usado; el gasto de hoy, de la ventana de 5 h o de la semana; cada cuánto consultar el plan (mínimo 2 minutos); **dólares o cualquier otra moneda**, con su símbolo y el tipo de cambio que escribas.
-- **Sonido:** un sonido suave de moneda sintetizado, apagado por defecto, que se silencia solo mientras juegas en pantalla completa o con No molestar.
+- **Sonido:** sonidos suaves sintetizados para cada diseño, apagados por defecto, que se silencian solos mientras juegas en pantalla completa o con No molestar. **Escuchar el diseño elegido** toca una muestra.
 
 ## Cómo funciona
 
@@ -102,7 +104,7 @@ npm run tauri build                     # instalador en src-tauri/target/release
 cd src-tauri && cargo test              # pruebas de ajustes, avisos, precios y registros
 ```
 
-En el navegador, `/` es la mesa, `/settings.html` son los ajustes y `/lab.html` muestra ampliados los sprites y las fuentes. Parámetros para probar: `?design=pildora|tragamonedas|pachinko`, `?still` (sin simulación), `?text=smooth`, `?currency=local&symbol=€&rate=0.92`, `?cost=1873.5`, `?used=93`, `?period=week`, `?bank=used`, `?ghost` y `?status=expired`.
+En el navegador, `/` es la mesa, `/settings.html` son los ajustes y `/lab.html` muestra ampliados los sprites y las fuentes. Parámetros para probar: `?design=pildora|tragamonedas|pachinko`, `?still` (sin simulación), `?lang=es|en`, `?scale=1.5`, `?text=smooth`, `?currency=local&symbol=€&rate=0.92`, `?cost=1873.5`, `?used=93`, `?period=week`, `?bank=used`, `?ghost` y `?status=expired`.
 
 Estructura:
 

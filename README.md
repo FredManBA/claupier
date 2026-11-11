@@ -5,17 +5,17 @@
 [Leer en español](README.es.md)
 
 <p>
-  <img src="docs/screenshots/mesa.png" alt="The Mesa design: casino table with your 5-hour bank in blue chips and today's spend in the pot" height="300">
-  <img src="docs/screenshots/tragamonedas.png" alt="The Tragamonedas design: slot machine with three reels and a pile of coins" height="300">
-  <img src="docs/screenshots/pachinko.png" alt="The Pachinko design: balls that fall into pockets by value" height="300">
+  <img src="docs/screenshots/en/mesa.png" alt="The Table design: your 5-hour bank in blue chips and today's spend in the pot" height="260">
+  <img src="docs/screenshots/en/tragamonedas.png" alt="The Slot machine design: three reels and a pile of coins, one color per value" height="260">
+  <img src="docs/screenshots/en/pachinko.png" alt="The Pachinko design: balls that land in the pocket of their value" height="260">
 </p>
 <p>
-  <img src="docs/screenshots/pildora.png" alt="The Píldora design: a single compact row" height="54">
+  <img src="docs/screenshots/en/pildora.png" alt="The Pill design: a single compact row" height="54">
 </p>
 
 > Claupier is an independent, unofficial project. It is not affiliated with, endorsed by or sponsored by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic. The name is a pun on Claude and *croupier*, the casino dealer.
 
-The app is in Spanish; this README explains every label you will see.
+The app speaks **English and Spanish**: it follows your Windows language, and you can change it in **Settings → Window → Language**.
 
 ## Install
 
@@ -38,45 +38,45 @@ To uninstall it, go to **Settings → Apps → Installed apps → Claupier**. Yo
 | Double-click | Refresh the plan now |
 | Right-click | Open the settings |
 
-The tray icon has the same options, plus **Salir** (quit). You can change the hotkeys in **Ajustes → Atajos**.
+The tray icon has the same options, plus **Quit**. You can change the hotkeys in **Settings → Shortcuts**.
 
 ### What the labels mean
 
 | Label | Meaning |
 |---|---|
-| **5H** / **TU BANCA 5H** | Your 5-hour usage window: how much is left (or used, if you choose so) |
-| **SEM** / **SEMANA** | Your weekly limit |
-| **HOY** | Today |
-| **POZO** | The pot: what you spent in the chosen period |
+| **5H** / **YOUR BANK 5H** | Your 5-hour usage window: how much is left (or used, if you choose so) |
+| **WEEK** / **WK** | Your weekly limit |
+| **TODAY** | Today |
+| **POT** | What you spent in the chosen period |
 | **◷ 2h 17m**, **◷ 3d 4h** | Time until that limit resets (d = days, h = hours, m = minutes) |
 | **4.8M TOKENS** / **TOK** | Tokens used in the period |
-| **ESPERA** | Anthropic asked to wait (too many requests); Claupier retries by itself |
-| **SIN RED** | No connection |
-| **SIN SESIÓN**, **ABRE CLAUDE**, **CADUCÓ** | Claude Code is not signed in or the session expired: open Claude Code to renew it |
+| **WAIT** | Anthropic asked to wait (too many requests); Claupier retries by itself |
+| **OFFLINE** | No connection |
+| **NOT SIGNED IN**, **SIGN IN**, **OPEN CLAUDE**, **EXPIRED** | Claude Code is not signed in or the session expired: open Claude Code to renew it |
 
 The status light next to the name is grey while loading, green when the plan is up to date, orange while waiting and red when something is wrong.
 
 ### The four designs
 
-Pick one in **Ajustes → Diseño**, with a live preview.
+Pick one in **Settings → Design**, with a live preview.
 
 | Design | What it shows |
 |---|---|
-| **Mesa** (table) | Your 5-hour bank as blue chips. When it drops, your chips slide into the pot. The pot holds your spend as casino chips |
-| **Píldora** (pill) | A single compact row to leave on top of a game |
-| **Tragamonedas** (slot machine) | Three reels: 5 hours, week and money. Each dollar is a coin; every $100 becomes a bag |
-| **Pachinko** | The hopper holds what is left of your 5 hours. Each ball lands in the pocket of its value. The tube on the right is the week |
+| **Table** | Your 5-hour bank as blue chips; when it drops, your chips slide into the pot. The pot holds your spend as casino chips, with the amount and tokens next to it. Sounds: chips landing and sliding |
+| **Pill** | A single compact row to leave on top of a game. Sound: a tiny tap |
+| **Slot machine** | Three reels: 5 hours, week and money. Your spend drops from the slot as coins, one color per value. Sounds: lever, reels and coins (deeper the more they are worth) |
+| **Pachinko** | The hopper holds what is left of your 5 hours. Each ball lands in the pocket of its value. The tube on the right is the week. Sounds: balls on the pins and into the pockets |
 
-Chip values: white $1, red $5, green $25, black $100 and **orange $500**.
+Chip and coin values: white $1, red $5, green $25, black $100 and **orange $500**.
 
 ### Settings
 
-- **Ventana (window):** size 1× to 4×, **pixel or normal text** (normal uses the Windows font for easier reading; the logo stays pixel art), opacity, anchor to a corner, always on top and animation level.
-- **Inicio (startup):** start with Windows, start hidden, start in ghost mode.
-- **Atajos (hotkeys):** change both hotkeys.
-- **Avisos (alerts):** Windows notifications when the 5-hour or weekly bank drops below a percentage, when you pass a spending cap or when the session expires. Each alert fires once per window or period.
-- **Datos (data):** show what is left or what is used; spending for today, the 5-hour window or the week; how often to check the plan (2 minutes minimum); **dollars or any other currency**, with its symbol and the exchange rate you type in.
-- **Sonido (sound):** a soft synthesized coin sound, off by default, muted automatically while you play in full screen or with Do Not Disturb on.
+- **Window:** language (automatic, English or Spanish), six sizes from 1× to 4×, **pixel or smooth text** (smooth uses the Windows font for easier reading; the logo stays pixel art), opacity, anchor to a corner, always on top and animation level.
+- **Startup:** start with Windows, start hidden, start in ghost mode.
+- **Shortcuts:** change both shortcuts.
+- **Alerts:** Windows notifications when the 5-hour or weekly bank drops below a percentage, when you pass a spending cap or when the session expires. Each alert fires once per window or period.
+- **Data:** show what is left or what is used; spending for today, the 5-hour window or the week; how often to check the plan (2 minutes minimum); **dollars or any other currency**, with its symbol and the exchange rate you type in.
+- **Sound:** soft synthesized sounds for each design, off by default, muted automatically while you play in full screen or with Do Not Disturb on. **Play the chosen design** gives you a sample.
 
 ## How it works
 
@@ -86,7 +86,7 @@ Claupier only reads data that is already on your computer, plus one request to A
 2. **Tokens and spend.** It reads Claude Code's local logs (`~/.claude/projects/**/*.jsonl`) from the last 8 days, only the new lines each time. It respects `CLAUDE_CONFIG_DIR` if you set it.
 3. **Equivalent cost.** The money shown is what those tokens would cost with [Anthropic's API prices](src-tauri/src/pricing.rs). On a Pro or Max plan you do not pay per token: it is a way to see how much you use, not a bill. Chips, balls and coins always count dollars, even if you show the amount in another currency.
 
-There is no telemetry, no account and no other network traffic. If you use Claude Code with an API key instead of a subscription, the plan section shows **SIN SESIÓN**, but the tokens and spend still work.
+There is no telemetry, no account and no other network traffic. If you use Claude Code with an API key instead of a subscription, the plan section shows **NOT SIGNED IN**, but the tokens and spend still work.
 
 **Known limitation:** games in *exclusive* full screen can cover the table. In *borderless* full screen it shows fine.
 
@@ -104,7 +104,7 @@ npm run tauri build                     # installer in src-tauri/target/release/
 cd src-tauri && cargo test              # tests for settings, alerts, prices and logs
 ```
 
-In the browser, `/` is the table, `/settings.html` the settings and `/lab.html` a zoomed view of the sprites and fonts. URL parameters for testing: `?design=pildora|tragamonedas|pachinko`, `?still` (no simulation), `?text=smooth`, `?currency=local&symbol=€&rate=0.92`, `?cost=1873.5`, `?used=93`, `?period=week`, `?bank=used`, `?ghost` and `?status=expired`.
+In the browser, `/` is the table, `/settings.html` the settings and `/lab.html` a zoomed view of the sprites and fonts. URL parameters for testing: `?design=pildora|tragamonedas|pachinko`, `?still` (no simulation), `?lang=en|es`, `?scale=1.5`, `?text=smooth`, `?currency=local&symbol=€&rate=0.92`, `?cost=1873.5`, `?used=93`, `?period=week`, `?bank=used`, `?ghost` and `?status=expired`.
 
 Project layout:
 
