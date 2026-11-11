@@ -98,8 +98,8 @@ const SECTIONS: Section[] = [
         kind: "choice",
         path: "scale",
         label: "Tamaño",
-        options: [[1, "1×"], [2, "2×"], [3, "3×"], [4, "4×"]],
-        help: "1× es la más chica: ideal para dejarla en una esquina mientras juegas.",
+        options: [[1, "1×"], [1.5, "1,5×"], [2, "2×"], [2.5, "2,5×"], [3, "3×"], [4, "4×"]],
+        help: "1× es la más chica: ideal para dejarla en una esquina mientras juegas. Los tamaños con medio se ven un poco más suaves.",
       },
       {
         kind: "choice",

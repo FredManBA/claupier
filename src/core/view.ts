@@ -16,6 +16,12 @@ export class DesignView {
   private low = document.createElement("canvas");
   private lowCtx = this.low.getContext("2d")!;
   private k = 1;
+  /**
+   * Con una escala que no es entera (1,5×, 2,5× o la pantalla al 125 %), el arte
+   * se amplía primero a la escala entera de arriba, sin suavizar, y después se
+   * reduce suavizando: así todos los píxeles miden lo mismo.
+   */
+  private mid: HTMLCanvasElement | null = null;
   private frameQueued = false;
   private wakeTimer: number | undefined;
   private paused = false;
@@ -23,7 +29,7 @@ export class DesignView {
   constructor(
     private canvas: HTMLCanvasElement,
     private design: Design,
-    /** Escala lógica (2, 3 o 4) antes de multiplicar por el DPR. */
+    /** Escala lógica (de 1 a 4, con medios) antes de multiplicar por el DPR. */
     private scale: number,
   ) {
     this.ctx = canvas.getContext("2d")!;
@@ -32,7 +38,7 @@ export class DesignView {
 
   /** Tamaño del canvas en píxeles físicos. */
   get physicalSize() {
-    return { width: this.design.width * this.k, height: this.design.height * this.k };
+    return { width: this.canvas.width, height: this.canvas.height };
   }
 
   setDesign(design: Design) {
@@ -48,15 +54,25 @@ export class DesignView {
   /** Ajusta el canvas a la escala y al DPR actuales. */
   fit() {
     const dpr = window.devicePixelRatio || 1;
-    this.k = Math.max(1, Math.round(this.scale * dpr));
+    // Casi entero (por ejemplo 3× con la pantalla al 100 % o 2× al 150 %): se
+    // redondea para que quede nítido. Si no, se usa tal cual.
+    const exact = Math.max(1, this.scale * dpr);
+    this.k = Math.abs(exact - Math.round(exact)) < 0.13 ? Math.round(exact) : exact;
     const { width, height } = this.design;
     this.low.width = width;
     this.low.height = height;
-    this.canvas.width = width * this.k;
-    this.canvas.height = height * this.k;
-    this.canvas.style.width = `${(width * this.k) / dpr}px`;
-    this.canvas.style.height = `${(height * this.k) / dpr}px`;
-    this.ctx.imageSmoothingEnabled = false;
+    this.canvas.width = Math.round(width * this.k);
+    this.canvas.height = Math.round(height * this.k);
+    this.canvas.style.width = `${this.canvas.width / dpr}px`;
+    this.canvas.style.height = `${this.canvas.height / dpr}px`;
+    if (Number.isInteger(this.k)) {
+      this.mid = null;
+    } else {
+      const up = Math.ceil(this.k);
+      this.mid ??= document.createElement("canvas");
+      this.mid.width = width * up;
+      this.mid.height = height * up;
+    }
     this.requestFrame();
   }
 
@@ -90,8 +106,20 @@ export class DesignView {
     } finally {
       endTextCapture();
     }
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.drawImage(this.low, 0, 0, this.canvas.width, this.canvas.height);
+    const g = this.ctx;
+    g.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (this.mid) {
+      const m = this.mid.getContext("2d")!;
+      m.imageSmoothingEnabled = false;
+      m.clearRect(0, 0, this.mid.width, this.mid.height);
+      m.drawImage(this.low, 0, 0, this.mid.width, this.mid.height);
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(this.mid, 0, 0, this.canvas.width, this.canvas.height);
+    } else {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(this.low, 0, 0, this.canvas.width, this.canvas.height);
+    }
     paintTextCommands(this.ctx, texts, this.k);
 
     if (busy) {

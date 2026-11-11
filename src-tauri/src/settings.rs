@@ -9,6 +9,8 @@ use tauri_plugin_global_shortcut::{Modifiers, Shortcut};
 
 pub const DESIGNS: &[&str] = &["mesa", "pildora", "tragamonedas", "pachinko"];
 const ANCHORS: &[&str] = &["free", "top-left", "top-right", "bottom-left", "bottom-right"];
+/// Los seis tamaños de la mesa.
+pub const SCALES: &[f64] = &[1.0, 1.5, 2.0, 2.5, 3.0, 4.0];
 /// Ctrl+Shift+Alt+Super y una tecla como «MediaPlayPause» caben de sobra.
 const MAX_HOTKEY_LEN: usize = 48;
 /// «MX$», «CHF» o «S/» caben; más no entra en las placas.
@@ -61,8 +63,8 @@ impl Default for Sound {
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub design: String,
-    /// Escala de los píxeles: de 1 a 4.
-    pub scale: u8,
+    /// Escala de los píxeles: uno de `SCALES`.
+    pub scale: f64,
     /// "pixel" o "smooth" (texto normal, sin pixelar).
     pub text_style: String,
     /// 0,3 a 1.
@@ -97,7 +99,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             design: "mesa".into(),
-            scale: 3,
+            scale: 3.0,
             text_style: "pixel".into(),
             opacity: 1.0,
             anchor: "free".into(),
@@ -142,7 +144,9 @@ impl Settings {
         one_of(&mut self.currency, &["USD", "local"], &d.currency);
         one_of(&mut self.motion, &["full", "reduced", "off"], &d.motion);
         one_of(&mut self.text_style, &["pixel", "smooth"], &d.text_style);
-        self.scale = self.scale.clamp(1, 4);
+        // El tamaño más cercano de la lista (los ajustes viejos guardaban 1 a 4).
+        let wanted = if self.scale.is_finite() { self.scale } else { d.scale };
+        self.scale = SCALES.iter().copied().min_by(|a, b| (a - wanted).abs().total_cmp(&(b - wanted).abs())).unwrap_or(d.scale);
         self.opacity = if self.opacity.is_finite() { self.opacity.clamp(0.3, 1.0) } else { 1.0 };
         self.plan_poll_minutes = self.plan_poll_minutes.clamp(2, 30);
         if !self.local_per_usd.is_finite() || self.local_per_usd <= 0.0 {
@@ -251,9 +255,9 @@ mod tests {
 
     #[test]
     fn sanitize_corrige_valores_fuera_de_rango() {
-        let mut s = Settings { scale: 9, opacity: 0.0, design: "ruleta".into(), plan_poll_minutes: 0, ..Default::default() };
+        let mut s = Settings { scale: 9.0, opacity: 0.0, design: "ruleta".into(), plan_poll_minutes: 0, ..Default::default() };
         s.sanitize();
-        assert_eq!(s.scale, 4);
+        assert_eq!(s.scale, 4.0);
         assert_eq!(s.opacity, 0.3);
         assert_eq!(s.design, "mesa");
         assert_eq!(s.plan_poll_minutes, 2);
@@ -270,10 +274,13 @@ mod tests {
 
     #[test]
     fn simbolo_de_moneda_corto_y_sin_controles() {
-        let mut s = Settings { local_symbol: "  MX$\u{7}XYZ ".into(), scale: 0, ..Default::default() };
+        let mut s = Settings { local_symbol: "  MX$\u{7}XYZ ".into(), scale: 0.0, ..Default::default() };
         s.sanitize();
         assert_eq!(s.local_symbol, "MX$X");
-        assert_eq!(s.scale, 1, "1× es el tamaño más chico");
+        assert_eq!(s.scale, 1.0, "1× es el tamaño más chico");
+        let mut medio = Settings { scale: 2.4, ..Default::default() };
+        medio.sanitize();
+        assert_eq!(medio.scale, 2.5, "se ajusta al tamaño más cercano");
         let mut vacio = Settings { local_symbol: "   ".into(), ..Default::default() };
         vacio.sanitize();
         assert_eq!(vacio.local_symbol, "₡");
@@ -285,7 +292,7 @@ mod tests {
         let next = s.merged(&json!({"alerts": {"spend": true}, "scale": 2})).unwrap();
         assert!(next.alerts.spend);
         assert!(next.alerts.five_hour, "no pisa los demás campos anidados");
-        assert_eq!(next.scale, 2);
+        assert_eq!(next.scale, 2.0);
     }
 
     #[test]

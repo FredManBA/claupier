@@ -42,7 +42,7 @@ export type TextStyle = "pixel" | "smooth";
 /** Espejo de `src-tauri/src/settings.rs`. */
 export interface Settings {
   design: DesignId;
-  /** Escala de los píxeles, de 1 a 4. */
+  /** Escala de los píxeles: 1, 1,5, 2, 2,5, 3 o 4. */
   scale: number;
   textStyle: TextStyle;
   opacity: number;
