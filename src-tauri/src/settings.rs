@@ -7,6 +7,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use tauri_plugin_global_shortcut::{Modifiers, Shortcut};
 
+use crate::i18n::Lang;
+
 pub const DESIGNS: &[&str] = &["mesa", "pildora", "tragamonedas", "pachinko"];
 const ANCHORS: &[&str] = &["free", "top-left", "top-right", "bottom-left", "bottom-right"];
 /// Los seis tamaños de la mesa.
@@ -67,6 +69,8 @@ pub struct Settings {
     pub scale: f64,
     /// "pixel" o "smooth" (texto normal, sin pixelar).
     pub text_style: String,
+    /// "auto" (el de Windows), "es" o "en".
+    pub language: String,
     /// 0,3 a 1.
     pub opacity: f64,
     pub anchor: String,
@@ -101,6 +105,7 @@ impl Default for Settings {
             design: "mesa".into(),
             scale: 3.0,
             text_style: "pixel".into(),
+            language: "auto".into(),
             opacity: 1.0,
             anchor: "free".into(),
             always_on_top: true,
@@ -144,6 +149,7 @@ impl Settings {
         one_of(&mut self.currency, &["USD", "local"], &d.currency);
         one_of(&mut self.motion, &["full", "reduced", "off"], &d.motion);
         one_of(&mut self.text_style, &["pixel", "smooth"], &d.text_style);
+        one_of(&mut self.language, &["auto", "es", "en"], &d.language);
         // El tamaño más cercano de la lista (los ajustes viejos guardaban 1 a 4).
         let wanted = if self.scale.is_finite() { self.scale } else { d.scale };
         self.scale = SCALES.iter().copied().min_by(|a, b| (a - wanted).abs().total_cmp(&(b - wanted).abs())).unwrap_or(d.scale);
@@ -191,15 +197,17 @@ impl Settings {
     }
 
     /// Aplica un cambio parcial (JSON) sobre los ajustes actuales.
-    pub fn merged(&self, patch: &serde_json::Value) -> Result<Settings, String> {
+    /// Los errores salen en el idioma `lang`, para mostrarlos en los ajustes.
+    pub fn merged(&self, patch: &serde_json::Value, lang: Lang) -> Result<Settings, String> {
         let mut base = serde_json::to_value(self).map_err(|e| e.to_string())?;
         merge(&mut base, patch);
-        let mut next: Settings = serde_json::from_value(base).map_err(|e| format!("Ajuste inválido: {e}"))?;
+        let mut next: Settings = serde_json::from_value(base)
+            .map_err(|e| format!("{}: {e}", lang.pick("Ajuste inválido", "Invalid setting")))?;
         // Los atajos se validan aparte para poder explicar el error.
-        parse_hotkey(&next.hotkey_toggle)?;
-        parse_hotkey(&next.hotkey_ghost)?;
+        parse_hotkey(&next.hotkey_toggle).map_err(|e| e.message(lang))?;
+        parse_hotkey(&next.hotkey_ghost).map_err(|e| e.message(lang))?;
         if same_hotkey(&next.hotkey_toggle, &next.hotkey_ghost) {
-            return Err("Los dos atajos no pueden ser iguales.".into());
+            return Err(lang.pick("Los dos atajos no pueden ser iguales.", "The two shortcuts can't be the same.").into());
         }
         next.sanitize();
         Ok(next)
@@ -219,16 +227,36 @@ fn merge(base: &mut serde_json::Value, patch: &serde_json::Value) {
 
 /// Lee un atajo como "Ctrl+Alt+F". Exige al menos un modificador, para no
 /// secuestrar una tecla suelta que el juego necesite.
-pub fn parse_hotkey(text: &str) -> Result<Shortcut, String> {
+pub fn parse_hotkey(text: &str) -> Result<Shortcut, HotkeyError> {
     if text.len() > MAX_HOTKEY_LEN || text.split('+').count() > 5 {
-        return Err("Ese atajo es demasiado largo. Usa algo como Ctrl+Alt+F.".into());
+        return Err(HotkeyError::TooLong);
     }
-    let shortcut =
-        Shortcut::from_str(text).map_err(|_| format!("No entiendo el atajo «{text}». Usa algo como Ctrl+Alt+F."))?;
+    let shortcut = Shortcut::from_str(text).map_err(|_| HotkeyError::Unknown(text.into()))?;
     if shortcut.mods.is_empty() || shortcut.mods == Modifiers::SHIFT {
-        return Err(format!("El atajo «{text}» necesita Ctrl, Alt o Win."));
+        return Err(HotkeyError::NoModifier(text.into()));
     }
     Ok(shortcut)
+}
+
+/// Por qué un atajo no vale.
+#[derive(Debug)]
+pub enum HotkeyError {
+    TooLong,
+    Unknown(String),
+    NoModifier(String),
+}
+
+impl HotkeyError {
+    pub fn message(&self, lang: Lang) -> String {
+        match (self, lang) {
+            (HotkeyError::TooLong, Lang::Es) => "Ese atajo es demasiado largo. Usa algo como Ctrl+Alt+F.".into(),
+            (HotkeyError::TooLong, Lang::En) => "That shortcut is too long. Use something like Ctrl+Alt+F.".into(),
+            (HotkeyError::Unknown(t), Lang::Es) => format!("No entiendo el atajo «{t}». Usa algo como Ctrl+Alt+F."),
+            (HotkeyError::Unknown(t), Lang::En) => format!("I don't understand the shortcut \"{t}\". Use something like Ctrl+Alt+F."),
+            (HotkeyError::NoModifier(t), Lang::Es) => format!("El atajo «{t}» necesita Ctrl, Alt o Win."),
+            (HotkeyError::NoModifier(t), Lang::En) => format!("The shortcut \"{t}\" needs Ctrl, Alt or Win."),
+        }
+    }
 }
 
 fn same_hotkey(a: &str, b: &str) -> bool {
@@ -289,7 +317,7 @@ mod tests {
     #[test]
     fn merged_aplica_cambios_anidados() {
         let s = Settings::default();
-        let next = s.merged(&json!({"alerts": {"spend": true}, "scale": 2})).unwrap();
+        let next = s.merged(&json!({"alerts": {"spend": true}, "scale": 2}), Lang::Es).unwrap();
         assert!(next.alerts.spend);
         assert!(next.alerts.five_hour, "no pisa los demás campos anidados");
         assert_eq!(next.scale, 2.0);
@@ -303,8 +331,9 @@ mod tests {
         assert!(parse_hotkey("Shift+F").is_err(), "solo Shift no basta");
         assert!(parse_hotkey("Ctrl+Alt+Nada").is_err());
         let s = Settings::default();
-        assert!(s.merged(&json!({"hotkeyGhost": "Ctrl+Alt+F"})).is_err(), "atajos repetidos");
-        assert!(s.merged(&json!({"hotkeyToggle": "banana"})).is_err());
+        assert!(s.merged(&json!({"hotkeyGhost": "Ctrl+Alt+F"}), Lang::Es).is_err(), "atajos repetidos");
+        let err = s.merged(&json!({"hotkeyToggle": "banana"}), Lang::En).unwrap_err();
+        assert!(err.contains("banana") && err.starts_with("I don't"), "el error sale en inglés");
         assert!(parse_hotkey("Ctrl+Ctrl+Ctrl+Ctrl+Ctrl+Ctrl+F").is_err(), "demasiado largo");
     }
 

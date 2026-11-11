@@ -1,4 +1,5 @@
 mod alerts;
+mod i18n;
 mod logs;
 mod plan;
 mod pricing;
@@ -11,6 +12,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use chrono::{DateTime, DurationRound, Utc};
+use i18n::Lang;
 use serde::Serialize;
 use settings::Settings;
 use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder};
@@ -49,6 +51,13 @@ struct AppState {
     refresh: Mutex<Option<Sender<()>>>,
     toggle_item: Mutex<Option<MenuItem<Wry>>>,
     ghost_item: Mutex<Option<CheckMenuItem<Wry>>>,
+    /// Ajustes, Actualizar ahora y Salir, para cambiarles el idioma.
+    other_items: Mutex<Vec<MenuItem<Wry>>>,
+}
+
+/// El idioma con el que escribir ahora (el de los ajustes guardados).
+fn current_lang(app: &AppHandle) -> Lang {
+    i18n::resolve(&app.state::<AppState>().settings.lock().unwrap().language)
 }
 
 // ── Comandos ──────────────────────────────────────────────────────────────
@@ -74,7 +83,7 @@ fn get_settings(state: tauri::State<AppState>) -> Settings {
 fn update_settings(app: AppHandle, patch: serde_json::Value) -> Result<Settings, String> {
     let state = app.state::<AppState>();
     let current = state.settings.lock().unwrap().clone();
-    let next = current.merged(&patch)?;
+    let next = current.merged(&patch, i18n::resolve(&current.language))?;
     let path = state.settings_path.lock().unwrap().clone();
     // Si algo falla (un atajo ocupado, el disco), se deshace lo ya aplicado
     // para que lo activo, lo guardado y lo que muestra la ventana coincidan.
@@ -116,7 +125,12 @@ fn set_hotkeys_paused(state: tauri::State<AppState>, paused: bool) {
 
 #[tauri::command]
 fn test_alert(app: AppHandle) -> Result<(), String> {
-    notify(&app, "Así se verán los avisos de Claupier", "Este es un aviso de prueba.")
+    let lang = current_lang(&app);
+    notify(
+        &app,
+        lang.pick("Así se verán los avisos de Claupier", "This is how Claupier's alerts will look"),
+        lang.pick("Este es un aviso de prueba.", "This is a test alert."),
+    )
 }
 
 // ── Ventana y estado ──────────────────────────────────────────────────────
@@ -183,6 +197,22 @@ fn hotkey_label(text: &str, key: &str) -> String {
     format!("{text}   {key}")
 }
 
+/// Pone los textos de la bandeja en el idioma y con los atajos de `cfg`.
+fn relabel_menu(app: &AppHandle, cfg: &Settings) {
+    let state = app.state::<AppState>();
+    let lang = i18n::resolve(&cfg.language);
+    if let Some(item) = state.toggle_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(hotkey_label(lang.pick("Mostrar u ocultar", "Show or hide"), &cfg.hotkey_toggle));
+    }
+    if let Some(item) = state.ghost_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(hotkey_label(lang.pick("Modo fantasma", "Ghost mode"), &cfg.hotkey_ghost));
+    }
+    let texts = [lang.pick("Ajustes…", "Settings…"), lang.pick("Actualizar ahora", "Refresh now"), lang.pick("Salir", "Quit")];
+    for (item, text) in state.other_items.lock().unwrap().iter().zip(texts) {
+        let _ = item.set_text(text);
+    }
+}
+
 /// Registra los atajos nuevos.
 ///
 /// - Al cambiarlos desde los ajustes (`strict`), es todo o nada: si uno falla
@@ -191,8 +221,10 @@ fn hotkey_label(text: &str, key: &str) -> String {
 ///   sigue funcionando.
 fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let toggle = settings::parse_hotkey(&new.hotkey_toggle)?;
-    let ghost = settings::parse_hotkey(&new.hotkey_ghost)?;
+    let lang = i18n::resolve(&new.language);
+    let toggle = settings::parse_hotkey(&new.hotkey_toggle).map_err(|e| e.message(lang))?;
+    let ghost = settings::parse_hotkey(&new.hotkey_ghost).map_err(|e| e.message(lang))?;
+    let and = lang.pick(" y ", " and ");
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut taken = Vec::new();
@@ -210,29 +242,34 @@ fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), St
             let _ = gs.register(t);
             let _ = gs.register(g);
         }
-        return Err(format!("El atajo {} ya lo usa otra aplicación.", taken.join(" y ")));
+        let keys = taken.join(and);
+        return Err(match lang {
+            Lang::Es => format!("El atajo {keys} ya lo usa otra aplicación."),
+            Lang::En => format!("Another app is already using {keys}."),
+        });
     }
     *state.keys.lock().unwrap() = Some((toggle, ghost));
-    if let Some(item) = state.toggle_item.lock().unwrap().as_ref() {
-        let _ = item.set_text(hotkey_label("Mostrar u ocultar", &new.hotkey_toggle));
-    }
-    if let Some(item) = state.ghost_item.lock().unwrap().as_ref() {
-        let _ = item.set_text(hotkey_label("Modo fantasma", &new.hotkey_ghost));
-    }
+    relabel_menu(app, new);
     if taken.is_empty() {
         Ok(())
     } else {
-        Err(format!("El atajo {} ya lo usa otra aplicación; cámbialo en los ajustes.", taken.join(" y ")))
+        let keys = taken.join(and);
+        Err(match lang {
+            Lang::Es => format!("El atajo {keys} ya lo usa otra aplicación; cámbialo en los ajustes."),
+            Lang::En => format!("Another app is already using {keys}; change it in the settings."),
+        })
     }
 }
 
-fn apply_autostart(app: &AppHandle, on: bool) -> Result<(), String> {
+fn apply_autostart(app: &AppHandle, on: bool, lang: Lang) -> Result<(), String> {
     let auto = app.autolaunch();
     let enabled = auto.is_enabled().unwrap_or(false);
     if on && !enabled {
-        auto.enable().map_err(|e| format!("No pude activar el arranque con Windows: {e}"))?;
+        let msg = lang.pick("No pude activar el arranque con Windows", "Couldn't turn on start with Windows");
+        auto.enable().map_err(|e| format!("{msg}: {e}"))?;
     } else if !on && enabled {
-        auto.disable().map_err(|e| format!("No pude quitar el arranque con Windows: {e}"))?;
+        let msg = lang.pick("No pude quitar el arranque con Windows", "Couldn't turn off start with Windows");
+        auto.disable().map_err(|e| format!("{msg}: {e}"))?;
     }
     Ok(())
 }
@@ -259,7 +296,10 @@ fn apply_settings(app: &AppHandle, old: Option<&Settings>, new: &Settings) -> Re
         step(apply_hotkeys(app, new, !startup))?;
     }
     if old.is_none_or(|o| o.autostart != new.autostart) {
-        step(apply_autostart(app, new.autostart))?;
+        step(apply_autostart(app, new.autostart, i18n::resolve(&new.language)))?;
+    }
+    if old.is_some_and(|o| o.language != new.language) {
+        relabel_menu(app, new);
     }
     if let Some(w) = app.get_webview_window(MAIN) {
         if old.is_none_or(|o| o.always_on_top != new.always_on_top) {
@@ -350,13 +390,13 @@ fn start_worker(app: AppHandle) {
             let window5h = scanner.totals_since(window_start(plan.five_hour.as_ref(), chrono::Duration::hours(5)));
             let week = scanner.totals_since(window_start(plan.seven_day.as_ref(), chrono::Duration::days(7)));
 
-            let (spend, name) = match cfg.period.as_str() {
-                "window5h" => (window5h.cost_usd, "en esta ventana de 5 h"),
-                "week" => (week.cost_usd, "esta semana"),
-                _ => (today.cost_usd, "hoy"),
+            let spend = match cfg.period.as_str() {
+                "window5h" => window5h.cost_usd,
+                "week" => week.cost_usd,
+                _ => today.cost_usd,
             };
             let key = period_key(&cfg.period, &plan);
-            for a in alert_state.check(&cfg.alerts, &plan, spend, &key, name) {
+            for a in alert_state.check(&cfg.alerts, &plan, spend, &key, &cfg.period, i18n::resolve(&cfg.language)) {
                 let _ = notify(&app, &a.title, &a.body);
             }
 
@@ -429,6 +469,7 @@ pub fn run() {
             refresh: Mutex::new(None),
             toggle_item: Mutex::new(None),
             ghost_item: Mutex::new(None),
+            other_items: Mutex::new(Vec::new()),
         })
         .on_window_event(|window, event| {
             if window.label() != SETTINGS {
@@ -457,11 +498,12 @@ pub fn run() {
                 *state.settings.lock().unwrap() = cfg.clone();
             }
 
-            let show = MenuItemBuilder::with_id("toggle", hotkey_label("Mostrar u ocultar", &cfg.hotkey_toggle)).build(app)?;
-            let ghost = CheckMenuItemBuilder::with_id("ghost", hotkey_label("Modo fantasma", &cfg.hotkey_ghost)).build(app)?;
-            let settings_item = MenuItemBuilder::with_id("settings", "Ajustes…").build(app)?;
-            let refresh = MenuItemBuilder::with_id("refresh", "Actualizar ahora").build(app)?;
-            let quit_item = MenuItemBuilder::with_id("quit", "Salir").build(app)?;
+            // Los textos los pone `relabel_menu`, en el idioma de los ajustes.
+            let show = MenuItemBuilder::with_id("toggle", "Claupier").build(app)?;
+            let ghost = CheckMenuItemBuilder::with_id("ghost", "Claupier").build(app)?;
+            let settings_item = MenuItemBuilder::with_id("settings", "Claupier").build(app)?;
+            let refresh = MenuItemBuilder::with_id("refresh", "Claupier").build(app)?;
+            let quit_item = MenuItemBuilder::with_id("quit", "Claupier").build(app)?;
             let menu = MenuBuilder::new(app)
                 .items(&[&show, &ghost, &settings_item, &refresh])
                 .separator()
@@ -471,7 +513,9 @@ pub fn run() {
                 let state = app.state::<AppState>();
                 *state.toggle_item.lock().unwrap() = Some(show);
                 *state.ghost_item.lock().unwrap() = Some(ghost);
+                *state.other_items.lock().unwrap() = vec![settings_item, refresh, quit_item];
             }
+            relabel_menu(app.handle(), &cfg);
 
             let mut tray = TrayIconBuilder::with_id("claupier")
                 .tooltip("Claupier")
@@ -499,7 +543,8 @@ pub fn run() {
 
             let handle = app.handle().clone();
             if let Err(e) = apply_settings(&handle, None, &cfg) {
-                let _ = notify(&handle, "Claupier arrancó con un problema", &e);
+                let title = i18n::resolve(&cfg.language).pick("Claupier arrancó con un problema", "Claupier started with a problem");
+                let _ = notify(&handle, title, &e);
             }
             if !cfg.start_hidden
                 && let Some(w) = app.get_webview_window(MAIN)
