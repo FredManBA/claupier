@@ -5,6 +5,7 @@ import "./settings.css";
 import { advanceDemo, createBridge, demoSnapshot, type Bridge } from "../core/bridge";
 import { chipSprites } from "../core/chips";
 import { pixelSupports, setTextStyle } from "../core/font";
+import { L, resolveLang, setLang } from "../core/i18n";
 import { hash } from "../core/paint";
 import { SoundEngine } from "../core/sound";
 import type { DeepPartial, Settings, Snapshot } from "../core/types";
@@ -81,38 +82,47 @@ const sound = new SoundEngine();
 let bridge: Bridge;
 let settings: Settings;
 
-const SECTIONS: Section[] = [
+/** Las secciones, en el idioma elegido (se construyen al arrancar). */
+function buildSections(): Section[] {
+  return [
   {
     id: "diseno",
-    title: "Diseño",
+    title: L("Diseño", "Design"),
     icon: ["..#####..", ".#.....#.", "#..###..#", "#.#...#.#", "#..###..#", ".#.....#.", "..#####.."],
-    lead: "Elige cómo se ve Claupier. Las vistas previas usan datos de ejemplo.",
+    lead: L("Elige cómo se ve Claupier. Las vistas previas usan datos de ejemplo.", "Choose how Claupier looks. The previews use sample data."),
     fields: [{ kind: "designs" }],
   },
   {
     id: "ventana",
-    title: "Ventana",
+    title: L("Ventana", "Window"),
     icon: ["#########", "#########", "#.......#", "#.......#", "#.......#", "#.......#", "#########"],
-    lead: "Tamaño, transparencia y lugar de la mesa en la pantalla.",
+    lead: L("Tamaño, transparencia y lugar de la mesa en la pantalla.", "Size, transparency and where the table sits on the screen."),
     fields: [
       {
         kind: "choice",
+        path: "language",
+        label: L("Idioma", "Language"),
+        options: [["auto", L("Automático", "Automatic")], ["es", "Español"], ["en", "English"]],
+        help: L("Automático usa el idioma de Windows.", "Automatic follows the Windows language."),
+      },
+      {
+        kind: "choice",
         path: "scale",
-        label: "Tamaño",
-        options: [[1, "1×"], [1.5, "1,5×"], [2, "2×"], [2.5, "2,5×"], [3, "3×"], [4, "4×"]],
-        help: "1× es la más chica: ideal para dejarla en una esquina mientras juegas. Los tamaños con medio se ven un poco más suaves.",
+        label: L("Tamaño", "Size"),
+        options: [[1, "1×"], [1.5, L("1,5×", "1.5×")], [2, "2×"], [2.5, L("2,5×", "2.5×")], [3, "3×"], [4, "4×"]],
+        help: L("1× es la más chica: ideal para dejarla en una esquina mientras juegas. Los tamaños con medio se ven un poco más suaves.", "1× is the smallest: great for a corner of the screen while you play. Half sizes look slightly softer."),
       },
       {
         kind: "choice",
         path: "textStyle",
-        label: "Texto",
-        options: [["pixel", "Pixel"], ["smooth", "Normal"]],
-        help: "Normal usa la letra de Windows, sin pixelar, para leer las cifras con más claridad. El logotipo sigue en pixel.",
+        label: L("Texto", "Text"),
+        options: [["pixel", L("Pixel", "Pixel")], ["smooth", L("Normal", "Smooth")]],
+        help: L("Normal usa la letra de Windows, sin pixelar, para leer las cifras con más claridad. El logotipo sigue en pixel.", "Smooth uses the Windows font, without pixels, so numbers read more clearly. The logo stays pixel art."),
       },
       {
         kind: "range",
         path: "opacity",
-        label: "Opacidad",
+        label: L("Opacidad", "Opacity"),
         min: 30,
         max: 100,
         step: 5,
@@ -123,135 +133,138 @@ const SECTIONS: Section[] = [
       {
         kind: "anchor",
         path: "anchor",
-        label: "Posición",
-        help: "Ánclala a una esquina o déjala libre para moverla arrastrando. Si la arrastras, queda libre.",
+        label: L("Posición", "Position"),
+        help: L("Ánclala a una esquina o déjala libre para moverla arrastrando. Si la arrastras, queda libre.", "Anchor it to a corner or leave it free to move it by dragging. If you drag it, it becomes free."),
       },
-      { kind: "switch", path: "alwaysOnTop", label: "Siempre encima" },
+      { kind: "switch", path: "alwaysOnTop", label: L("Siempre encima", "Always on top") },
       {
         kind: "choice",
         path: "motion",
-        label: "Animación",
-        options: [["full", "Completa"], ["reduced", "Reducida"], ["off", "Apagada"]],
-        help: "Reducida: las fichas aparecen sin caer y no giran solas.",
+        label: L("Animación", "Animation"),
+        options: [["full", L("Completa", "Full")], ["reduced", L("Reducida", "Reduced")], ["off", L("Apagada", "Off")]],
+        help: L("Reducida: las fichas aparecen sin caer y no giran solas.", "Reduced: chips appear without falling and don't spin by themselves."),
       },
     ],
   },
   {
     id: "inicio",
-    title: "Inicio",
+    title: L("Inicio", "Startup"),
     icon: ["....#....", "..#.#.#..", ".#..#..#.", "#...#...#", "#.......#", ".#.....#.", "..#####.."],
-    lead: "Qué hace Claupier al arrancar.",
+    lead: L("Qué hace Claupier al arrancar.", "What Claupier does when it starts."),
     fields: [
-      { kind: "switch", path: "autostart", label: "Arrancar con Windows" },
-      { kind: "switch", path: "startHidden", label: "Empezar oculta", help: "Aparece cuando pulses el atajo." },
-      { kind: "switch", path: "startGhost", label: "Empezar en modo fantasma", help: "Los clics atraviesan la mesa." },
+      { kind: "switch", path: "autostart", label: L("Arrancar con Windows", "Start with Windows") },
+      { kind: "switch", path: "startHidden", label: L("Empezar oculta", "Start hidden"), help: L("Aparece cuando pulses el atajo.", "It appears when you press the shortcut.") },
+      { kind: "switch", path: "startGhost", label: L("Empezar en modo fantasma", "Start in ghost mode"), help: L("Los clics atraviesan la mesa.", "Clicks go through the table.") },
     ],
   },
   {
     id: "atajos",
-    title: "Atajos",
+    title: L("Atajos", "Shortcuts"),
     icon: ["#########", "#.......#", "#.#.#.#.#", "#.......#", "#.#####.#", "#.......#", "#########"],
-    lead: "Pulsa un botón y luego la combinación nueva. Esc cancela.",
+    lead: L("Pulsa un botón y luego la combinación nueva. Esc cancela.", "Press a button, then the new combination. Esc cancels."),
     fields: [
-      { kind: "hotkey", path: "hotkeyToggle", label: "Mostrar u ocultar" },
-      { kind: "hotkey", path: "hotkeyGhost", label: "Modo fantasma" },
+      { kind: "hotkey", path: "hotkeyToggle", label: L("Mostrar u ocultar", "Show or hide") },
+      { kind: "hotkey", path: "hotkeyGhost", label: L("Modo fantasma", "Ghost mode") },
     ],
   },
   {
     id: "avisos",
-    title: "Avisos",
+    title: L("Avisos", "Alerts"),
     icon: ["....#....", "..#####..", ".#######.", ".#######.", ".#######.", "#########", "....#...."],
-    lead: "Notificaciones de Windows. Cada una suena una sola vez por ventana o periodo.",
+    lead: L("Notificaciones de Windows. Cada una suena una sola vez por ventana o periodo.", "Windows notifications. Each one fires only once per window or period."),
     fields: [
-      { kind: "switch", path: "alerts.fiveHour", label: "Banca de 5 h baja" },
-      { kind: "number", path: "alerts.fiveHourBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%", under: "alerts.fiveHour" },
-      { kind: "switch", path: "alerts.week", label: "Banca semanal baja" },
-      { kind: "number", path: "alerts.weekBelow", label: "Avisar bajo", min: 1, max: 90, step: 1, unit: "%", under: "alerts.week" },
-      { kind: "switch", path: "alerts.spend", label: "Tope de gasto", help: "Del periodo elegido en Datos, en dólares." },
+      { kind: "switch", path: "alerts.fiveHour", label: L("Banca de 5 h baja", "Low 5-hour bank") },
+      { kind: "number", path: "alerts.fiveHourBelow", label: L("Avisar bajo", "Alert below"), min: 1, max: 90, step: 1, unit: "%", under: "alerts.fiveHour" },
+      { kind: "switch", path: "alerts.week", label: L("Banca semanal baja", "Low weekly bank") },
+      { kind: "number", path: "alerts.weekBelow", label: L("Avisar bajo", "Alert below"), min: 1, max: 90, step: 1, unit: "%", under: "alerts.week" },
+      { kind: "switch", path: "alerts.spend", label: L("Tope de gasto", "Spending cap"), help: L("Del periodo elegido en Datos, en dólares.", "For the period chosen in Data, in dollars.") },
       {
         kind: "number",
         path: "alerts.spendOverUsd",
-        label: "Avisar sobre",
+        label: L("Avisar sobre", "Alert above"),
         min: 1,
         max: 100000,
         step: 1,
         unit: "USD",
         under: "alerts.spend",
       },
-      { kind: "switch", path: "alerts.expired", label: "Sesión caducada" },
-      { kind: "action", label: "Probar", button: "Enviar aviso de prueba", run: () => bridge.testAlert() },
+      { kind: "switch", path: "alerts.expired", label: L("Sesión caducada", "Session expired") },
+      { kind: "action", label: L("Probar", "Try it"), button: L("Enviar aviso de prueba", "Send a test alert"), run: () => bridge.testAlert() },
     ],
   },
   {
     id: "datos",
-    title: "Datos",
+    title: L("Datos", "Data"),
     icon: [".......#.", ".......#.", "....#..#.", "....#..#.", ".#..#..#.", ".#..#..#.", "#########"],
-    lead: "Qué cuenta la banca, qué periodo muestran las fichas y en qué moneda.",
+    lead: L("Qué cuenta la banca, qué periodo muestran las fichas y en qué moneda.", "What the bank counts, which period the chips show and in which currency."),
     fields: [
-      { kind: "choice", path: "bankShows", label: "La banca muestra", options: [["left", "Lo que queda"], ["used", "Lo usado"]] },
+      { kind: "choice", path: "bankShows", label: L("La banca muestra", "The bank shows"), options: [["left", L("Lo que queda", "What's left")], ["used", L("Lo usado", "What's used")]] },
       {
         kind: "choice",
         path: "period",
-        label: "Gasto de",
-        options: [["today", "Hoy"], ["window5h", "Ventana 5 h"], ["week", "Semana"]],
+        label: L("Gasto de", "Spend for"),
+        options: [["today", L("Hoy", "Today")], ["window5h", L("Ventana 5 h", "5-hour window")], ["week", L("Semana", "Week")]],
       },
       {
         kind: "range",
         path: "planPollMinutes",
-        label: "Consultar el plan",
+        label: L("Consultar el plan", "Check the plan"),
         min: 2,
         max: 30,
         step: 1,
         show: (v) => `${v} min`,
-        help: "Anthropic limita las consultas seguidas; menos de 2 minutos no está permitido.",
+        help: L("Anthropic limita las consultas seguidas; menos de 2 minutos no está permitido.", "Anthropic limits repeated requests; less than 2 minutes is not allowed."),
       },
       {
         kind: "choice",
         path: "currency",
-        label: "Moneda",
-        options: [["USD", "Dólares"], ["local", "Otra moneda"]],
-        help: "El gasto se calcula en dólares. Con otra moneda, Claupier lo convierte con el cambio que escribas.",
+        label: L("Moneda", "Currency"),
+        options: [["USD", L("Dólares", "Dollars")], ["local", L("Otra moneda", "Other currency")]],
+        help: L("El gasto se calcula en dólares. Con otra moneda, Claupier lo convierte con el cambio que escribas.", "Spend is calculated in dollars. With another currency, Claupier converts it with the rate you type."),
       },
       {
         kind: "text",
         path: "localSymbol",
-        label: "Símbolo",
+        label: L("Símbolo", "Symbol"),
         maxLength: 4,
         placeholder: "₡",
-        help: "Por ejemplo ₡, €, £, ¥, MX$ o S/. Hasta 4 caracteres.",
+        help: L("Por ejemplo ₡, €, £, ¥, MX$ o S/. Hasta 4 caracteres.", "For example ₡, €, £, ¥, MX$ or S/. Up to 4 characters."),
         showIf: (s) => s.currency === "local",
         warn: (s) => {
           if (s.textStyle !== "pixel") return null;
           const missing = [...s.localSymbol].filter((ch) => ch.trim() && !pixelSupports(ch));
-          return missing.length
-            ? `La letra pixel no tiene «${missing.join("")}»: elige el texto Normal en Ventana o usa otro símbolo.`
-            : null;
+          if (!missing.length) return null;
+          const chars = missing.join("");
+          return L(
+            `La letra pixel no tiene «${chars}»: elige el texto Normal en Ventana o usa otro símbolo.`,
+            `The pixel font has no "${chars}": choose Smooth text in Window or use another symbol.`,
+          );
         },
       },
       {
         kind: "number",
         path: "localPerUsd",
-        label: "1 dólar vale",
+        label: L("1 dólar vale", "1 dollar is worth"),
         min: 0.0001,
         max: 1_000_000,
         step: 0.01,
         unit: (s) => s.localSymbol || "¤",
-        help: "Cuántas unidades de tu moneda compras con un dólar. Escríbelo a mano y actualízalo cuando cambie.",
+        help: L("Cuántas unidades de tu moneda compras con un dólar. Escríbelo a mano y actualízalo cuando cambie.", "How many units of your currency one dollar buys. Type it in and update it when it changes."),
         showIf: (s) => s.currency === "local",
       },
     ],
   },
   {
     id: "sonido",
-    title: "Sonido",
+    title: L("Sonido", "Sound"),
     icon: ["...#.....", "..##..#..", "####...#.", "####.#.#.", "####...#.", "..##..#..", "...#....."],
-    lead: "Sonidos suaves generados en el momento, sin agudos. Cada diseño tiene los suyos. Vienen apagados.",
+    lead: L("Sonidos suaves generados en el momento, sin agudos. Cada diseño tiene los suyos. Vienen apagados.", "Soft sounds generated on the fly, with no harsh highs. Each design has its own. They start off."),
     fields: [
-      { kind: "switch", path: "sound.enabled", label: "Activar sonido" },
+      { kind: "switch", path: "sound.enabled", label: L("Activar sonido", "Turn on sound") },
       {
         kind: "range",
         path: "sound.volume",
-        label: "Volumen",
+        label: L("Volumen", "Volume"),
         min: 0,
         max: 100,
         step: 5,
@@ -262,19 +275,20 @@ const SECTIONS: Section[] = [
       {
         kind: "switch",
         path: "sound.muteInGame",
-        label: "Silenciar en juego",
-        help: "Con una app en pantalla completa o con Windows en No molestar.",
+        label: L("Silenciar en juego", "Mute while gaming"),
+        help: L("Con una app en pantalla completa o con Windows en No molestar.", "With an app in full screen or Windows in Do Not Disturb."),
       },
       {
         kind: "action",
-        label: "Probar",
-        button: "Escuchar el diseño elegido",
-        help: "Mesa: fichas y su roce. Píldora: un toque mínimo. Tragamonedas: palanca, rodillos y monedas. Pachinko: bolas y casillas.",
+        label: L("Probar", "Try it"),
+        button: L("Escuchar el diseño elegido", "Play the chosen design"),
+        help: L("Mesa: fichas y su roce. Píldora: un toque mínimo. Tragamonedas: palanca, rodillos y monedas. Pachinko: bolas y casillas.", "Table: chips and their slide. Pill: a tiny tap. Slot machine: lever, reels and coins. Pachinko: balls and pockets."),
         run: () => playDesignSounds(),
       },
     ],
   },
-];
+  ];
+}
 
 /** Una muestra de los sonidos del diseño elegido, con el volumen elegido. */
 function playDesignSounds() {
@@ -324,7 +338,7 @@ function setStatus(text: string, kind: "" | "saved" | "error" = "") {
 async function save(path: Path, value: unknown) {
   try {
     settings = await bridge.updateSettings(patchFor(path, value));
-    setStatus("Guardado", "saved");
+    setStatus(L("Guardado", "Saved"), "saved");
   } catch (e) {
     setStatus(String(e), "error");
   }
@@ -493,7 +507,7 @@ function renderField(f: Field): HTMLElement {
         stopCapture = stop;
         capturing = true;
         btn.classList.add("capturing");
-        btn.textContent = "Pulsa la combinación…";
+        btn.textContent = L("Pulsa la combinación…", "Press the combination…");
         void bridge.setHotkeysPaused(true);
         window.addEventListener("keydown", onKey, true);
       });
@@ -507,18 +521,18 @@ function renderField(f: Field): HTMLElement {
       screen.setAttribute("role", "radiogroup");
       screen.setAttribute("aria-label", f.label);
       const names: Record<string, string> = {
-        "top-left": "Arriba a la izquierda",
-        "top-right": "Arriba a la derecha",
-        "bottom-left": "Abajo a la izquierda",
-        "bottom-right": "Abajo a la derecha",
-        free: "Libre",
+        "top-left": L("Arriba a la izquierda", "Top left"),
+        "top-right": L("Arriba a la derecha", "Top right"),
+        "bottom-left": L("Abajo a la izquierda", "Bottom left"),
+        "bottom-right": L("Abajo a la derecha", "Bottom right"),
+        free: L("Libre", "Free"),
       };
       const buttons = Object.entries(names).map(([value, name]) => {
         const b = el("button", { type: "button", title: name });
         b.dataset.value = value;
         b.setAttribute("role", "radio");
         b.setAttribute("aria-label", name);
-        if (value === "free") b.textContent = "Libre";
+        if (value === "free") b.textContent = L("Libre", "Free");
         b.addEventListener("click", () => void save(f.path, value));
         screen.append(b);
         return [value, b] as const;
@@ -562,7 +576,7 @@ const STAGE_WIDE = { w: 400, h: 84 };
 function renderDesigns(): HTMLElement {
   const grid = el("div", { className: "designs" });
   grid.setAttribute("role", "radiogroup");
-  grid.setAttribute("aria-label", "Diseño");
+  grid.setAttribute("aria-label", L("Diseño", "Design"));
   const snap: Snapshot = demoSnapshot();
   const views: DesignView[] = [];
   const dpr = window.devicePixelRatio || 1;
@@ -590,7 +604,7 @@ function renderDesigns(): HTMLElement {
     }).observe(stage);
     card.append(
       stage,
-      el("div", { className: "head" }, el("strong", { textContent: info.name }), el("em", { className: "badge", textContent: "En uso" })),
+      el("div", { className: "head" }, el("strong", { textContent: info.name }), el("em", { className: "badge", textContent: L("En uso", "In use") })),
       el("span", { textContent: info.description }),
     );
     card.addEventListener("click", () => void save("design", info.id));
@@ -669,13 +683,27 @@ function drawBrandChip() {
 
 // ── Arranque ───────────────────────────────────────────────────────────────
 
+/** Los textos fijos de settings.html, en el idioma elegido. */
+function applyStaticTexts() {
+  document.documentElement.lang = L("es", "en");
+  document.title = L("Ajustes de Claupier", "Claupier settings");
+  document.querySelector(".subtitle")!.textContent = L("Ajustes", "Settings");
+  document.querySelector("#close")!.setAttribute("aria-label", L("Cerrar ajustes", "Close settings"));
+  document.querySelector("#nav")!.setAttribute("aria-label", L("Secciones", "Sections"));
+}
+
 async function start() {
   bridge = await createBridge();
   await bridge.onSettings((next) => {
+    const relabel = next.language !== settings?.language && settings !== undefined;
     settings = next;
-    refreshAll();
+    if (relabel) location.reload();
+    else refreshAll();
   });
   settings = await bridge.getSettings();
+  setLang(resolveLang(settings.language));
+  applyStaticTexts();
+  const SECTIONS = buildSections();
 
   const nav = document.querySelector<HTMLElement>("#nav")!;
   const content = document.querySelector<HTMLElement>("#content")!;

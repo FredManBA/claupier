@@ -116,6 +116,7 @@ function demoBridge(): Bridge {
   if (params.has("symbol")) fromUrl.localSymbol = params.get("symbol")!;
   if (params.has("rate")) fromUrl.localPerUsd = Number(params.get("rate"));
   if (params.has("text")) fromUrl.textStyle = params.get("text") as Settings["textStyle"];
+  if (params.has("lang")) fromUrl.language = params.get("lang") as Settings["language"];
   if (params.has("motion")) fromUrl.motion = params.get("motion") as Settings["motion"];
   if (params.has("bank")) fromUrl.bankShows = params.get("bank") as Settings["bankShows"];
   settings = mergeDeep(settings, fromUrl);

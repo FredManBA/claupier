@@ -1,4 +1,5 @@
 import { textWidth } from "./font";
+import { L, getLang } from "./i18n";
 import type { LimitWindow, Period, Settings, Snapshot, Totals } from "./types";
 
 // En todos los formatos, cada tramo se elige con el valor ya redondeado:
@@ -91,7 +92,7 @@ export function formatReset(iso: string | null | undefined, now = Date.now()): s
   if (!iso) return "";
   const ms = new Date(iso).getTime() - now;
   if (!Number.isFinite(ms)) return "";
-  if (ms <= 0) return "YA";
+  if (ms <= 0) return L("YA", "NOW");
   // Hacia arriba: con 30 s restantes se lee «1m», no «0m».
   const min = Math.ceil(ms / 60_000);
   const d = Math.floor(min / 1440);
@@ -103,7 +104,16 @@ export function formatReset(iso: string | null | undefined, now = Date.now()): s
   return `${m}m`;
 }
 
-export const PERIOD_LABEL: Record<Period, string> = { today: "HOY", window5h: "5H", week: "SEM" };
+/** Nombre corto del periodo: HOY / TODAY, 5H y SEM / WEEK. */
+export function periodLabel(period: Period): string {
+  if (period === "window5h") return "5H";
+  return period === "week" ? L("SEM", "WEEK") : L("HOY", "TODAY");
+}
+
+/** «SEM» o «WK» para los huecos más chicos (la píldora). */
+export const weekShort = () => L("SEM", "WK");
+/** «SEM» o «WEEK» para las etiquetas de columna. */
+export const weekLabel = () => L("SEM", "WEEK");
 
 /** Los totales del periodo elegido en los ajustes. */
 export function periodTotals(snap: Snapshot, period: Period): Totals {
@@ -128,26 +138,34 @@ export function bankUrgency(win: LimitWindow | null | undefined): 0 | 1 | 2 {
 }
 
 /** Una sola palabra para los huecos chicos (un rodillo, una columna). */
-export const STATUS_SHORT: Record<string, string> = {
-  loading: "...",
-  ok: "",
-  expired: "CADUCÓ",
-  no_credentials: "SESIÓN",
-  rate_limited: "ESPERA",
-  error: "SIN RED",
-};
-
-/** El estado completo en una línea: «SIN SESIÓN», «ABRE CLAUDE»… */
-export function statusLine(status: string | undefined): string {
-  return (STATUS_TEXT[status ?? "loading"] ?? STATUS_TEXT.loading).filter(Boolean).join(" ") || "...";
+export function statusShort(status: string | undefined): string {
+  const words: Record<string, [string, string]> = {
+    loading: ["...", "..."],
+    ok: ["", ""],
+    expired: ["CADUCÓ", "EXPIRED"],
+    no_credentials: ["SESIÓN", "SIGN IN"],
+    rate_limited: ["ESPERA", "WAIT"],
+    error: ["SIN RED", "OFFLINE"],
+  };
+  const [es, en] = words[status ?? "loading"] ?? words.loading;
+  return L(es, en) || "...";
 }
 
 /** El estado en dos líneas, para la mesa. */
-export const STATUS_TEXT: Record<string, [string, string]> = {
-  loading: ["...", ""],
-  ok: ["", ""],
-  expired: ["ABRE", "CLAUDE"],
-  no_credentials: ["SIN", "SESIÓN"],
-  rate_limited: ["ESPERA", ""],
-  error: ["SIN RED", ""],
-};
+export function statusText(status: string | undefined): [string, string] {
+  const lines: Record<string, [[string, string], [string, string]]> = {
+    loading: [["...", ""], ["...", ""]],
+    ok: [["", ""], ["", ""]],
+    expired: [["ABRE", "CLAUDE"], ["OPEN", "CLAUDE"]],
+    no_credentials: [["SIN", "SESIÓN"], ["NOT", "SIGNED IN"]],
+    rate_limited: [["ESPERA", ""], ["WAIT", ""]],
+    error: [["SIN RED", ""], ["OFFLINE", ""]],
+  };
+  const [es, en] = lines[status ?? "loading"] ?? lines.loading;
+  return getLang() === "es" ? es : en;
+}
+
+/** El estado completo en una línea: «SIN SESIÓN», «NOT SIGNED IN»… */
+export function statusLine(status: string | undefined): string {
+  return statusText(status).filter(Boolean).join(" ") || "...";
+}

@@ -38,6 +38,7 @@ export type Anchor = "free" | "top-left" | "top-right" | "bottom-left" | "bottom
 export type Period = "today" | "window5h" | "week";
 export type Motion = "full" | "reduced" | "off";
 export type TextStyle = "pixel" | "smooth";
+export type LanguageSetting = "auto" | "es" | "en";
 
 /** Espejo de `src-tauri/src/settings.rs`. */
 export interface Settings {
@@ -45,6 +46,8 @@ export interface Settings {
   /** Escala de los píxeles: 1, 1,5, 2, 2,5, 3 o 4. */
   scale: number;
   textStyle: TextStyle;
+  /** "auto" sigue el idioma de Windows. */
+  language: LanguageSetting;
   opacity: number;
   anchor: Anchor;
   alwaysOnTop: boolean;
@@ -78,6 +81,7 @@ export const DEFAULT_SETTINGS: Settings = {
   design: "mesa",
   scale: 3,
   textStyle: "pixel",
+  language: "auto",
   opacity: 1,
   anchor: "free",
   alwaysOnTop: true,

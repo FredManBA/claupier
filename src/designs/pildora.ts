@@ -3,7 +3,7 @@
 // Las cifras que importan (tu banca y el dinero) van en la fuente grande.
 
 import { CountUp } from "../core/anim";
-import { bankUrgency, bankValue, formatMoney, formatMoneyShort, periodTotals, resetForms, statusLine } from "../core/format";
+import { bankUrgency, bankValue, formatMoney, formatMoneyShort, periodTotals, resetForms, statusLine, weekShort } from "../core/format";
 import { type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
 import { BRASS, drawGhost, drawLed, layer, rect, rounded } from "../core/paint";
@@ -105,7 +105,8 @@ export class Pildora implements Design {
     // cabe, la cuenta atrás se compacta («@2h18m», «@2h») antes de quitar los
     // centavos, y solo al final desaparece.
     const limit = snap?.ghost ? LED_X - 10 : LED_X - 2;
-    const fixed = 6 + 15 + bankW + 5 + textWidth("SEM") + 3 + textWidth(weekText) + 5 + 5 + 15;
+    const week7 = weekShort();
+    const fixed = 6 + 15 + bankW + 5 + textWidth(week7) + 3 + textWidth(weekText) + 5 + 5 + 15;
     const resets = bank === null ? [] : resetForms(plan?.fiveHour?.resetsAt).filter((t) => t.startsWith("@"));
     const full = settings ? formatMoney(this.cost.shown, settings) : "";
     const short = settings ? formatMoneyShort(this.cost.shown, settings) : "";
@@ -138,8 +139,8 @@ export class Pildora implements Design {
     x = this.separator(g, x);
 
     // Semana
-    drawText(g, "SEM", x, SMALL_Y, C.dim, shadow);
-    x += textWidth("SEM") + 3;
+    drawText(g, week7, x, SMALL_Y, C.dim, shadow);
+    x += textWidth(week7) + 3;
     drawText(g, weekText, x, SMALL_Y, week === null ? C.warn : tone(bankUrgency(plan?.sevenDay)), shadow);
     x += textWidth(weekText) + 5;
     x = this.separator(g, x);

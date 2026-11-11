@@ -5,8 +5,8 @@
 //   placa     — dinero y tokens del periodo
 
 import {
-  PERIOD_LABEL,
-  STATUS_TEXT,
+  periodLabel,
+  statusText,
   statusLine,
   bankUrgency,
   bankValue,
@@ -18,6 +18,7 @@ import {
 import { CHIP_DIMS, type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
 import { CountUp, easeInOut, lerp } from "../core/anim";
+import { L } from "../core/i18n";
 import { BRASS, LOGO_GRADIENT, drawFelt, drawGhost, drawLed, drawWoodFrame, layer, rect, rounded, shadow } from "../core/paint";
 import { DENOMS, Stack, chipsFor } from "../core/stack";
 import type { LimitWindow, Motion, PlanStatus, Snapshot } from "../core/types";
@@ -181,7 +182,7 @@ export class Mesa implements Design {
 
     // Pozo: su nombre y los tokens a la izquierda, el gasto en dorado a la derecha
     const period = settings?.period ?? "today";
-    drawText(g, `POZO ${PERIOD_LABEL[period]}`, 9, 34, C.dim);
+    drawText(g, `${L("POZO", "POT")} ${periodLabel(period)}`, 9, 34, C.dim);
     if (settings) {
       const money = formatMoney(this.cost.shown, settings);
       drawText(g, money, W - 9 - textWidth(money, "big"), 34, C.gold, { font: "big", shadow: C.shadow });
@@ -203,7 +204,7 @@ export class Mesa implements Design {
     }
 
     // Tu banca
-    drawText(g, shows === "used" ? "USADO 5H" : "TU BANCA 5H", 9, 90, C.dim);
+    drawText(g, shows === "used" ? L("USADO 5H", "USED 5H") : L("TU BANCA 5H", "YOUR BANK 5H"), 9, 90, C.dim);
     const palette = this.bankPalette(plan?.fiveHour);
     for (const s of this.bank) s.draw(g, now, palette);
     this.drawBankText(g, plan?.fiveHour, plan?.status);
@@ -253,7 +254,7 @@ export class Mesa implements Design {
       v === null
         ? [[statusLine(status), C.warn]]
         : [
-            ["SEMANA ", C.signText],
+            [L("SEMANA ", "WEEK "), C.signText],
             [`${v}%`, [C.cream, C.warn, C.bad][bankUrgency(week)]],
           ];
     const reset = v === null ? "" : resetLabel(week?.resetsAt, 40);
@@ -270,7 +271,7 @@ export class Mesa implements Design {
     const x = 52;
     const value = bankValue(win, this.ctx?.settings.bankShows ?? "left");
     if (value === null) {
-      const [a, b] = STATUS_TEXT[status ?? "loading"] ?? STATUS_TEXT.loading;
+      const [a, b] = statusText(status);
       drawText(g, a || "...", x, 101, C.warn, { shadow: C.shadow });
       if (b) drawText(g, b, x, 108, C.warn, { shadow: C.shadow });
       return;

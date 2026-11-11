@@ -5,8 +5,9 @@
 // se van por el desagüe. El tubo de la derecha es lo que te queda de la semana.
 
 import {
-  PERIOD_LABEL,
-  STATUS_SHORT,
+  periodLabel,
+  statusShort,
+  weekLabel,
   bankUrgency,
   bankValue,
   formatMoney,
@@ -224,7 +225,7 @@ export class Pachinko implements Design {
       { iso: plan?.sevenDay?.resetsAt, room: W - 6 - 76 },
     ]);
     this.drawReading(g, 9, reset5, "5H", plan?.fiveHour, plan?.status, shows);
-    this.drawReading(g, 76, resetWeek, "SEM", plan?.sevenDay, undefined, shows);
+    this.drawReading(g, 76, resetWeek, weekLabel(), plan?.sevenDay, undefined, shows);
     const left5 = plan?.fiveHour ? Math.max(0, 100 - plan.fiveHour.used) : 0;
     this.drawHopper(g, Math.round((left5 / 100) * HOPPER_CAP));
     const leftW = plan?.sevenDay ? Math.max(0, 100 - plan.sevenDay.used) : 0;
@@ -247,7 +248,7 @@ export class Pachinko implements Design {
     drawText(g, label, x, 17, C.dim);
     const v = bankValue(win, shows);
     if (v === null) {
-      const word = (status && STATUS_SHORT[status]) || "...";
+      const word = statusShort(status);
       drawText(g, word, x, 24, C.warn, { shadow: C.shadow });
       return;
     }
@@ -407,7 +408,7 @@ export class Pachinko implements Design {
     const settings = this.ctx?.settings;
     if (!snap || !settings) return;
     const totals = periodTotals(snap, settings.period);
-    const label = `${PERIOD_LABEL[settings.period]} `;
+    const label = `${periodLabel(settings.period)} `;
     const money = formatMoney(totals.costUsd, settings);
     const y = FOOTER_Y;
     drawText(g, label, 8, y, C.dim, { shadow: C.shadow });

@@ -2,6 +2,7 @@
 
 import { createBridge, inTauri } from "./core/bridge";
 import { setTextStyle } from "./core/font";
+import { L, resolveLang, setLang } from "./core/i18n";
 import { SoundEngine } from "./core/sound";
 import type { Settings, Snapshot } from "./core/types";
 import { DesignView, effectiveMotion } from "./core/view";
@@ -34,6 +35,12 @@ async function start() {
     await bridge.fitWindow(width, height);
   };
 
+  const applyLanguage = () => {
+    setLang(resolveLang(settings.language));
+    document.documentElement.lang = L("es", "en");
+    canvas.setAttribute("aria-label", L("Uso de Claude: tu plan y tu gasto", "Claude usage: your plan and your spend"));
+  };
+
   const applyLook = () => {
     canvas.style.opacity = String(settings.opacity);
     sound.configure(settings.sound, snap.quiet);
@@ -51,6 +58,7 @@ async function start() {
     const prev = settings;
     settings = next;
     setTextStyle(settings.textStyle);
+    applyLanguage();
     if (!view) return;
     applyLook();
     if (next.design !== prev.design) {
@@ -69,6 +77,7 @@ async function start() {
   settings = await bridge.getSettings();
   snap = await bridge.getSnapshot();
   setTextStyle(settings.textStyle);
+  applyLanguage();
 
   view = new DesignView(canvas, createDesign(settings.design), settings.scale);
   applyLook();

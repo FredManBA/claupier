@@ -6,8 +6,9 @@
 // valor quedan arriba del montón, que es lo que se ve.
 
 import {
-  PERIOD_LABEL,
-  STATUS_SHORT,
+  periodLabel,
+  statusShort,
+  weekLabel,
   bankUrgency,
   bankValue,
   formatMoneyShort,
@@ -146,7 +147,7 @@ export class Tragamonedas implements Design {
   setSnapshot(snap: Snapshot, ctx: DesignContext, now: number, first: boolean) {
     this.ctx = ctx;
     const s = ctx.settings;
-    const statusWord = STATUS_SHORT[snap.plan.status] || "...";
+    const statusWord = statusShort(snap.plan.status);
     const five = bankValue(snap.plan.fiveHour, s.bankShows);
     const week = bankValue(snap.plan.sevenDay, s.bankShows);
     const cost = periodTotals(snap, s.period).costUsd;
@@ -310,7 +311,7 @@ export class Tragamonedas implements Design {
 
     // Etiquetas y datos debajo de cada rodillo
     const period = settings?.period ?? "today";
-    const labels = ["5H", "SEM", PERIOD_LABEL[period]];
+    const labels = ["5H", weekLabel(), periodLabel(period)];
     const subs = [
       ...resetLabels([
         { iso: snap?.plan.fiveHour?.resetsAt, room: REEL_W - 1 },
