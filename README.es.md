@@ -5,7 +5,7 @@
 [Read in English](README.md)
 
 <p>
-  <img src="docs/screenshots/es/mesa.png" alt="El diseño Mesa: tu banca de 5 h en fichas azules y el gasto de hoy en el pozo" height="260">
+  <img src="docs/screenshots/es/mesa.png" alt="El diseño Mesa: tu banca de 5 h en fichas azules, la semana en fichas moradas y el gasto de hoy en el pozo" height="260">
   <img src="docs/screenshots/es/tragamonedas.png" alt="El diseño Tragamonedas: tres rodillos y un montón de monedas, un color por valor" height="260">
   <img src="docs/screenshots/es/pachinko.png" alt="El diseño Pachinko: bolas que caen en la casilla de su valor" height="260">
 </p>
@@ -62,7 +62,7 @@ Se eligen en **Ajustes → Diseño**, con vista previa animada.
 
 | Diseño | Qué muestra |
 |---|---|
-| **Mesa** | Tu banca de 5 h en fichas azules; cuando baja, tus fichas se deslizan al pozo. En el pozo está tu gasto en fichas de casino, con el monto y los tokens al lado. Sonidos: fichas que caen y se deslizan |
+| **Mesa** | Tu banca de 5 h en fichas azules y la semanal en fichas moradas, una ficha por cada 10 %; cuando baja la de 5 h, sus fichas se deslizan al pozo. En el pozo está tu gasto en fichas de casino, con el monto y los tokens al lado. Sonidos: fichas que caen y se deslizan |
 | **Píldora** | Una sola fila compacta para dejar encima de un juego. Sonido: un toque mínimo |
 | **Tragamonedas** | Tres rodillos: 5 horas, semana y dinero. El gasto cae por la ranura en monedas, un color por cada valor. Sonidos: palanca, rodillos y monedas (más graves cuanto más valen) |
 | **Pachinko** | La tolva guarda lo que te queda de las 5 horas. Cada bola cae en la casilla de su valor. El tubo de la derecha es la semana. Sonidos: bolas en los clavos y al entrar en la casilla |

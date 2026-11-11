@@ -5,7 +5,7 @@
 [Leer en español](README.es.md)
 
 <p>
-  <img src="docs/screenshots/en/mesa.png" alt="The Table design: your 5-hour bank in blue chips and today's spend in the pot" height="260">
+  <img src="docs/screenshots/en/mesa.png" alt="The Table design: your 5-hour bank in blue chips, your week in purple chips and today's spend in the pot" height="260">
   <img src="docs/screenshots/en/tragamonedas.png" alt="The Slot machine design: three reels and a pile of coins, one color per value" height="260">
   <img src="docs/screenshots/en/pachinko.png" alt="The Pachinko design: balls that land in the pocket of their value" height="260">
 </p>
@@ -62,7 +62,7 @@ Pick one in **Settings → Design**, with a live preview.
 
 | Design | What it shows |
 |---|---|
-| **Table** | Your 5-hour bank as blue chips; when it drops, your chips slide into the pot. The pot holds your spend as casino chips, with the amount and tokens next to it. Sounds: chips landing and sliding |
+| **Table** | Your 5-hour bank as blue chips and your weekly bank as purple chips, one chip per 10%; when the 5-hour bank drops, its chips slide into the pot. The pot holds your spend as casino chips, with the amount and tokens next to it. Sounds: chips landing and sliding |
 | **Pill** | A single compact row to leave on top of a game. Sound: a tiny tap |
 | **Slot machine** | Three reels: 5 hours, week and money. Your spend drops from the slot as coins, one color per value. Sounds: lever, reels and coins (deeper the more they are worth) |
 | **Pachinko** | The hopper holds what is left of your 5 hours. Each ball lands in the pocket of its value. The tube on the right is the week. Sounds: balls on the pins and into the pockets |
