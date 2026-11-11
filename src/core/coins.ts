@@ -89,7 +89,15 @@ function seeded(seed: number) {
  * mientras el vecino esté bastante más abajo (dos o tres capas, al azar, para
  * que el montón no salga demasiado regular). Cada capa sube 2 px.
  */
-export function layoutHeap(count: number, width: number, floor: number, dropX: number, size: CoinSize = "small"): CoinSpot[] {
+/** `flat`: todas tumbadas (la tragamonedas); si no, algunas quedan de canto. */
+export function layoutHeap(
+  count: number,
+  width: number,
+  floor: number,
+  dropX: number,
+  size: CoinSize = "small",
+  flat = false,
+): CoinSpot[] {
   const FULL = COIN_W[size];
   const COL = FULL / 2;
   const RISE = size === "big" ? 3 : 2;
@@ -100,7 +108,7 @@ export function layoutHeap(count: number, width: number, floor: number, dropX: n
   const center = Math.round((dropX - COL) / COL);
   for (let i = 0; i < count; i++) {
     const roll = rnd();
-    const pose: CoinPose = roll < 0.07 ? "round" : roll < 0.12 ? "tilt" : "flat";
+    const pose: CoinPose = flat ? "flat" : roll < 0.07 ? "round" : roll < 0.12 ? "tilt" : "flat";
     let c = Math.max(0, Math.min(cols - 1, center + Math.round((rnd() - 0.5) * 2.4)));
     for (let step = 0; step < 60; step++) {
       const left = c > 0 ? h[c - 1] : Infinity;

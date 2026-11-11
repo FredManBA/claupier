@@ -16,7 +16,7 @@ import {
   tokensLabel,
   periodTotals,
 } from "../core/format";
-import { type CoinPalette, type CoinSpot, SPIN, coinSprite, layoutHeap } from "../core/coins";
+import { type CoinPalette, type CoinSpot, coinSprite, layoutHeap } from "../core/coins";
 import { drawText, textWidth } from "../core/font";
 import { lerp } from "../core/anim";
 import { BRASS, LED, LOGO_GRADIENT, drawGhost, layer, ledKind, rect, rounded } from "../core/paint";
@@ -87,7 +87,7 @@ const MAX_COINS = 36;
 const MAX_QUEUE = 16;
 
 // El montón se apoya justo sobre el labio de la bandeja, para que no lo tape.
-const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR - 1, HEAP_W / 2, "big").map((s) => ({ ...s, x: s.x + HEAP_X }));
+const SPOTS: CoinSpot[] = layoutHeap(MAX_COINS, HEAP_W, FLOOR - 1, HEAP_W / 2, "big", true).map((s) => ({ ...s, x: s.x + HEAP_X }));
 const COIN_COLORS = DENOMS.map((d) => d.palette as CoinPalette);
 const COIN_PITCH = [1.12, 1, 0.9, 0.8, 0.72];
 
@@ -521,9 +521,9 @@ export class Tragamonedas implements Design {
     const fromY = CHUTE.y + 2;
     const x = lerp(coin.fromX, target.x, t);
     const y = lerp(fromY, target.y, t * t);
-    const frame = SPIN[Math.floor((now - coin.start) / 55) % SPIN.length];
-    const sprite = coinSprite(frame, color, "big");
-    g.drawImage(sprite, Math.round(x + (12 - sprite.width) / 2), Math.round(y));
+    // Siempre tumbada: cae plana, con un leve vaivén, sin girar de canto.
+    const sway = Math.round(Math.sin((now - coin.start) / 60) * 0.6);
+    g.drawImage(coinSprite("flat", color, "big"), Math.round(x) + sway, Math.round(y));
   }
 
 }

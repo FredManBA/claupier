@@ -23,7 +23,7 @@ import type { LimitWindow, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
 const W = 104;
-const H = 150;
+const H = 156;
 
 const C = {
   ink: "#0b0f1c",
@@ -54,7 +54,7 @@ const C = {
 const DENOM_TEXT = ["#ece6d6", "#ee6b70", "#5fcf86", "#a8a6b8", "#ffac4f"];
 
 // Tolva: un embudo de 4 filas (9, 8, 7 y 6 bolas, de arriba abajo).
-const HOPPER_ROWS = [6, 7, 8, 9];
+const HOPPER_ROWS = [4, 5, 6, 7];
 const HOPPER_CAP = HOPPER_ROWS.reduce((a, b) => a + b, 0);
 const HOPPER = { cx: 52, bottom: 33 };
 const OUTLET = { x: 50, y: 36 };
@@ -72,7 +72,11 @@ const POCKET_FLOOR = 129;
 const POCKET_SLOTS = 10;
 const TUBE = { x: 93, y: 40, h: 81 };
 /** Línea del gasto y los tokens, debajo de las etiquetas de las casillas. */
-const FOOTER_Y = 139;
+const FOOTER_Y = 144;
+/** Línea punteada que separa el pie (el gasto) del tablero. */
+const FOOTER_LINE_Y = 140;
+/** Dónde empieza la columna de la semana, a la derecha de la tolva. */
+const WEEK_X = 70;
 const TUBE_CAP = 20;
 
 const ROW_MS = 80;
@@ -218,14 +222,14 @@ export class Pachinko implements Design {
     if (snap?.ghost) drawGhost(g, 9, 8);
 
     // Banca de 5 h a la izquierda; la semana a la derecha.
-    // Cada lectura tiene su hueco (la izquierda hasta la tolva, la derecha hasta
+    // Cada lectura tiene su hueco de 28 px (la izquierda hasta la tolva, la derecha hasta
     // el marco) y las dos cuentas atrás usan la misma forma.
     const [reset5, resetWeek] = resetLabels([
-      { iso: plan?.fiveHour?.resetsAt, room: 30 },
-      { iso: plan?.sevenDay?.resetsAt, room: W - 6 - 76 },
+      { iso: plan?.fiveHour?.resetsAt, room: 28 },
+      { iso: plan?.sevenDay?.resetsAt, room: W - 6 - WEEK_X },
     ]);
-    this.drawReading(g, 9, reset5, "5H", plan?.fiveHour, plan?.status, shows);
-    this.drawReading(g, 76, resetWeek, weekLabel(), plan?.sevenDay, undefined, shows);
+    this.drawReading(g, 7, reset5, "5H", plan?.fiveHour, plan?.status, shows);
+    this.drawReading(g, WEEK_X, resetWeek, weekLabel(), plan?.sevenDay, undefined, shows);
     const left5 = plan?.fiveHour ? Math.max(0, 100 - plan.fiveHour.used) : 0;
     this.drawHopper(g, Math.round((left5 / 100) * HOPPER_CAP));
     const leftW = plan?.sevenDay ? Math.max(0, 100 - plan.sevenDay.used) : 0;
@@ -293,6 +297,10 @@ export class Pachinko implements Design {
       }
       rect(g, x, POCKET_FLOOR + 1, 17, 1, C.wall);
     });
+
+    // Separación del pie, donde va el gasto
+    g.fillStyle = C.wall;
+    for (let x = 8; x < W - 8; x += 2) g.fillRect(x, FOOTER_LINE_Y, 1, 1);
 
     // Tubo de la semana, vacío
     const t = TUBE;
