@@ -16,13 +16,13 @@ import {
 } from "../core/format";
 import { BALL, drawBall } from "../core/balls";
 import { drawText, textWidth } from "../core/font";
-import { BRASS, LOGO_GRADIENT, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect } from "../core/paint";
+import { LOGO_GRADIENT, drawGhost, drawLed, drawWoodFrame, layer, rect } from "../core/paint";
 import { DENOMS, chipsFor } from "../core/stack";
 import type { LimitWindow, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
 const W = 104;
-const H = 164;
+const H = 150;
 
 const C = {
   ink: "#0b0f1c",
@@ -70,8 +70,9 @@ const POCKET_TOP = 113;
 const POCKET_FLOOR = 129;
 const POCKET_SLOTS = 10;
 const TUBE = { x: 93, y: 40, h: 81 };
+/** Línea del gasto y los tokens, debajo de las etiquetas de las casillas. */
+const FOOTER_Y = 139;
 const TUBE_CAP = 20;
-const PLATE = { x: 6, y: 143, w: 92, h: 14 };
 
 const ROW_MS = 80;
 const RELEASE_EVERY = 160;
@@ -231,7 +232,7 @@ export class Pachinko implements Design {
 
     this.drawPockets(g, now);
     for (const ball of this.balls) this.drawFallingBall(g, ball, now);
-    this.drawPlate(g, snap);
+    this.drawFooter(g, snap);
   }
 
   private drawReading(
@@ -401,16 +402,20 @@ export class Pachinko implements Design {
     drawBall(g, "big", fromX + (toX - fromX) * frac, fromY + (toY - fromY) * frac * frac - hop);
   }
 
-  private drawPlate(g: CanvasRenderingContext2D, snap: Snapshot | null) {
-    const { x, y, w, h } = PLATE;
-    g.drawImage(layer("pachinko:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
+  /** Al pie del tablero: el gasto del periodo en dorado y los tokens, discretos. */
+  private drawFooter(g: CanvasRenderingContext2D, snap: Snapshot | null) {
     const settings = this.ctx?.settings;
     if (!snap || !settings) return;
     const totals = periodTotals(snap, settings.period);
-    const money = `${PERIOD_LABEL[settings.period]} ${formatMoney(totals.costUsd, settings)}`;
-    engrave(g, money, x + 5, y + 5, BRASS.ink);
-    const tokens = tokensLabel(totals.totalTokens, w - 15 - textWidth(money));
-    engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 5, "#4a3210");
+    const label = `${PERIOD_LABEL[settings.period]} `;
+    const money = formatMoney(totals.costUsd, settings);
+    const y = FOOTER_Y;
+    drawText(g, label, 8, y, C.dim, { shadow: C.shadow });
+    const mx = 8 + textWidth(label);
+    drawText(g, money, mx, y, C.gold, { shadow: C.shadow });
+    const room = W - 8 - (mx + textWidth(money) + 4);
+    const tokens = tokensLabel(totals.totalTokens, room);
+    drawText(g, tokens, W - 8 - textWidth(tokens), y, C.dim, { shadow: C.shadow });
   }
 }
 

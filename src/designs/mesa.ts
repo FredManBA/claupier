@@ -18,13 +18,13 @@ import {
 import { CHIP_DIMS, type PaletteName, chipSprites, drawChip } from "../core/chips";
 import { drawText, textWidth } from "../core/font";
 import { CountUp, easeInOut, lerp } from "../core/anim";
-import { BRASS, LOGO_GRADIENT, drawFelt, drawGhost, drawLed, drawPlate, drawWoodFrame, engrave, layer, rect, rounded, shadow } from "../core/paint";
+import { BRASS, LOGO_GRADIENT, drawFelt, drawGhost, drawLed, drawWoodFrame, layer, rect, rounded, shadow } from "../core/paint";
 import { DENOMS, Stack, chipsFor } from "../core/stack";
 import type { LimitWindow, Motion, PlanStatus, Snapshot } from "../core/types";
 import type { Design, DesignContext } from "./design";
 
 const W = 112;
-const H = 150;
+const H = 130;
 
 const C = {
   ink: "#0b1a12",
@@ -52,7 +52,6 @@ const POT_BASE = 75;
 const POT_X = (i: number) => 7 + i * 20;
 const BANK_BASE = 122;
 const BANK_X = [8, 28];
-const PLATE = { x: 7, y: 127, w: 98, h: 16 };
 /** Adonde se deslizan tus fichas: el centro del pozo. */
 const POT_CENTER = { x: 47, y: 44 };
 
@@ -179,9 +178,16 @@ export class Mesa implements Design {
     g.drawImage(layer("mesa:fondo", W, H, (b) => this.drawTable(b)), 0, 0);
     this.drawSign(g, plan?.sevenDay, plan?.status, snap?.ghost ?? false);
 
-    // Pozo, con el valor impreso bajo cada casilla
+    // Pozo: su nombre y los tokens a la izquierda, el gasto en dorado a la derecha
     const period = settings?.period ?? "today";
     drawText(g, `POZO ${PERIOD_LABEL[period]}`, 9, 34, C.dim);
+    if (settings) {
+      const money = formatMoney(this.cost.shown, settings);
+      drawText(g, money, W - 9 - textWidth(money, "big"), 34, C.gold, { font: "big", shadow: C.shadow });
+      const totals = snap ? periodTotals(snap, period) : null;
+      const room = W - 9 - textWidth(money, "big") - 4 - 9;
+      drawText(g, tokensLabel(totals?.totalTokens ?? 0, room), 9, 41, C.dim);
+    }
     DENOMS.forEach((d, i) => {
       const cx = POT_X(i) + 9;
       drawText(g, d.label, cx - Math.floor(textWidth(d.label) / 2), POT_BASE + 3, C.printText);
@@ -202,7 +208,6 @@ export class Mesa implements Design {
     this.drawBankText(g, plan?.fiveHour, plan?.status);
 
     this.drawGliders(g, now);
-    this.drawPlate(g, snap);
   }
 
   /** Lo que no cambia: marco, paño, casillas impresas y la línea de puntos. */
@@ -296,17 +301,6 @@ export class Mesa implements Design {
     }
   }
 
-  private drawPlate(g: CanvasRenderingContext2D, snap: Snapshot | null) {
-    const { x, y, w, h } = PLATE;
-    g.drawImage(layer("mesa:placa", W, H, (b) => drawPlate(b, x, y, w, h)), 0, 0);
-    const settings = this.ctx?.settings;
-    if (!settings) return;
-    const money = formatMoney(this.cost.shown, settings);
-    engrave(g, money, x + 5, y + 4, BRASS.ink, { font: "big" });
-    const totals = snap ? periodTotals(snap, settings.period) : null;
-    const tokens = tokensLabel(totals?.totalTokens ?? 0, w - 15 - textWidth(money, "big"));
-    engrave(g, tokens, x + w - 6 - textWidth(tokens), y + 6, "#4a3210");
-  }
 }
 
 /** Anillo elíptico de 1 px (la casilla impresa en el paño). */

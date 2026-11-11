@@ -1,7 +1,6 @@
 // Materiales compartidos por los diseños: paño, madera, latón, pilotos de
 // estado y el fantasma. Lo que no cambia se dibuja una vez en una capa.
 
-import { drawText, type TextOpts } from "./font";
 import type { PlanStatus } from "./types";
 
 export type G = CanvasRenderingContext2D;
@@ -113,22 +112,6 @@ export const BRASS: BrassColors = {
   light: "#d9ab4d",
   shine: "#f2cd6e",
 };
-
-/** Placa de latón biselada. */
-export function drawPlate(g: G, x: number, y: number, w: number, h: number, c: BrassColors = BRASS) {
-  rounded(g, x, y, w, h, c.ink, 1);
-  rect(g, x + 1, y + 1, w - 2, h - 2, c.base);
-  rect(g, x + 1, y + 1, w - 2, 1, c.shine);
-  rect(g, x + 1, y + 2, 1, h - 3, c.light);
-  rect(g, x + 1, y + h - 2, w - 2, 1, c.dark);
-  rect(g, x + w - 2, y + 2, 1, h - 4, c.dark);
-}
-
-/** Texto grabado en el latón: oscuro con un filo de luz debajo. */
-export function engrave(g: G, text: string, x: number, y: number, ink: string, opts: TextOpts = {}) {
-  drawText(g, text, x, y + 1, BRASS.shine, opts);
-  drawText(g, text, x, y, ink, opts);
-}
 
 // ── Piloto de estado ──────────────────────────────────────────────────────
 
