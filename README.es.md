@@ -34,6 +34,8 @@ Para desinstalarla: **Configuración → Aplicaciones → Aplicaciones instalada
 |---|---|
 | `Ctrl+Alt+F` | Muestra u oculta la mesa sin quitarle el foco al juego |
 | `Ctrl+Alt+G` | Modo fantasma: los clics atraviesan la mesa |
+| `Ctrl+Alt+R` | Repetir la animación: el diseño se vacía y se vuelve a llenar con tus datos reales, para ver el arte desde cero |
+| `Ctrl+Alt+C` | Modo caótico: unos 12 segundos con datos de prueba en los que el gasto pasa por todas las fichas y monedas y las bancas bajan hasta el rojo, para ver cada animación, efecto y color. Después vuelve a tus datos |
 | Arrastrar | Mueve la mesa (si estaba anclada a una esquina, pasa a posición libre) |
 | Doble clic | Actualiza el plan en ese momento |
 | Clic derecho | Abre los ajustes |
@@ -73,7 +75,7 @@ Valor de las fichas y las monedas: blanca $1, roja $5, verde $25, negra $100 y *
 
 - **Ventana:** idioma (automático, español o inglés), seis tamaños de 1× a 4×, **texto pixel o normal** (el normal usa la letra de Windows para leer mejor; el logotipo sigue en pixel), opacidad, anclar a una esquina, siempre encima y nivel de animación.
 - **Inicio:** arrancar con Windows, empezar oculta y empezar en modo fantasma.
-- **Atajos:** cambiar los dos atajos.
+- **Atajos:** cambiar los cuatro atajos.
 - **Avisos:** notificaciones de Windows cuando la banca de 5 h o la semanal bajan de un porcentaje, cuando pasas un tope de gasto o cuando caduca la sesión. Cada aviso suena una sola vez por ventana o periodo.
 - **Datos:** mostrar lo que queda o lo usado; el gasto de hoy, de la ventana de 5 h o de la semana; cada cuánto consultar el plan (mínimo 2 minutos); **dólares o cualquier otra moneda**, con su símbolo y el tipo de cambio que escribas.
 - **Sonido:** sonidos suaves sintetizados para cada diseño, apagados por defecto, que se silencian solos mientras juegas en pantalla completa o con No molestar. **Escuchar el diseño elegido** toca una muestra.

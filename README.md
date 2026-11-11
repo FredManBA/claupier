@@ -34,6 +34,8 @@ To uninstall it, go to **Settings → Apps → Installed apps → Claupier**. Yo
 |---|---|
 | `Ctrl+Alt+F` | Show or hide the table without taking focus from your game |
 | `Ctrl+Alt+G` | Ghost mode: clicks go through the table |
+| `Ctrl+Alt+R` | Replay the animation: the design empties and fills again with your real data, so you can watch the art from scratch |
+| `Ctrl+Alt+C` | Chaos mode: about 12 seconds of test data where spend runs through every chip and coin and the banks drop to red, to show every animation, effect and color. Then it goes back to your data |
 | Drag | Move the table (if it was anchored to a corner, it becomes free) |
 | Double-click | Refresh the plan now |
 | Right-click | Open the settings |
@@ -73,7 +75,7 @@ Chip and coin values: white $1, red $5, green $25, black $100 and **orange $500*
 
 - **Window:** language (automatic, English or Spanish), six sizes from 1× to 4×, **pixel or smooth text** (smooth uses the Windows font for easier reading; the logo stays pixel art), opacity, anchor to a corner, always on top and animation level.
 - **Startup:** start with Windows, start hidden, start in ghost mode.
-- **Shortcuts:** change both shortcuts.
+- **Shortcuts:** change the four shortcuts.
 - **Alerts:** Windows notifications when the 5-hour or weekly bank drops below a percentage, when you pass a spending cap or when the session expires. Each alert fires once per window or period.
 - **Data:** show what is left or what is used; spending for today, the 5-hour window or the week; how often to check the plan (2 minutes minimum); **dollars or any other currency**, with its symbol and the exchange rate you type in.
 - **Sound:** soft synthesized sounds for each design, off by default, muted automatically while you play in full screen or with Do Not Disturb on. **Play the chosen design** gives you a sample.
