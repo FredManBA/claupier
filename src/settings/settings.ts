@@ -64,7 +64,7 @@ type Field =
       /** Aviso que depende del valor (o `null` si no hay nada que avisar). */
       warn?: (s: Settings) => string | null;
     }
-  | { kind: "hotkey"; path: Path; label: string }
+  | { kind: "hotkey"; path: Path; label: string; help?: string }
   | { kind: "anchor"; path: Path; label: string; help?: string }
   | { kind: "action"; label: string; button: string; help?: string; run: () => Promise<void> | void }
   | { kind: "designs" };
@@ -165,6 +165,24 @@ function buildSections(): Section[] {
     fields: [
       { kind: "hotkey", path: "hotkeyToggle", label: L("Mostrar u ocultar", "Show or hide") },
       { kind: "hotkey", path: "hotkeyGhost", label: L("Modo fantasma", "Ghost mode") },
+      {
+        kind: "hotkey",
+        path: "hotkeyReplay",
+        label: L("Repetir animación", "Replay animation"),
+        help: L(
+          "Vacía el diseño y lo vuelve a llenar con tus datos reales, para ver el arte desde cero.",
+          "Empties the design and fills it again with your real data, to watch the art from scratch.",
+        ),
+      },
+      {
+        kind: "hotkey",
+        path: "hotkeyShow",
+        label: L("Modo caótico", "Chaos mode"),
+        help: L(
+          "Unos 12 segundos con datos de prueba: el gasto pasa por todas las fichas y las bancas bajan hasta el rojo, para ver cada animación y color. Después vuelve a tus datos.",
+          "About 12 seconds of test data: spend runs through every chip and the banks drop to red, to see every animation and color. Then it goes back to your data.",
+        ),
+      },
     ],
   },
   {
@@ -514,7 +532,7 @@ function renderField(f: Field): HTMLElement {
       refreshers.push(() => {
         if (!capturing) btn.textContent = String(get(f.path));
       });
-      return fieldRow(f.label, btn, undefined, id);
+      return fieldRow(f.label, btn, f.help, id);
     }
     case "anchor": {
       const screen = el("div", { className: "screen" });

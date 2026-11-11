@@ -56,6 +56,8 @@ export interface Settings {
   startGhost: boolean;
   hotkeyToggle: string;
   hotkeyGhost: string;
+  hotkeyReplay: string;
+  hotkeyShow: string;
   alerts: {
     fiveHour: boolean;
     fiveHourBelow: number;
@@ -90,6 +92,8 @@ export const DEFAULT_SETTINGS: Settings = {
   startGhost: false,
   hotkeyToggle: "Ctrl+Alt+F",
   hotkeyGhost: "Ctrl+Alt+G",
+  hotkeyReplay: "Ctrl+Alt+R",
+  hotkeyShow: "Ctrl+Alt+C",
   alerts: {
     fiveHour: true,
     fiveHourBelow: 20,

@@ -46,13 +46,38 @@ struct AppState {
     snap: Mutex<Snapshot>,
     settings: Mutex<Settings>,
     settings_path: Mutex<PathBuf>,
-    keys: Mutex<Option<(Shortcut, Shortcut)>>,
+    /// Los atajos registrados y qué hace cada uno.
+    keys: Mutex<Vec<(Shortcut, HotkeyAction)>>,
     hotkeys_paused: Mutex<bool>,
     refresh: Mutex<Option<Sender<()>>>,
     toggle_item: Mutex<Option<MenuItem<Wry>>>,
     ghost_item: Mutex<Option<CheckMenuItem<Wry>>>,
     /// Ajustes, Actualizar ahora y Salir, para cambiarles el idioma.
     other_items: Mutex<Vec<MenuItem<Wry>>>,
+    /// Repetir animación y Modo caótico, que muestran su atajo.
+    play_items: Mutex<Vec<MenuItem<Wry>>>,
+}
+
+/// Qué hace cada atajo, en el orden de `Settings::hotkeys`.
+#[derive(Clone, Copy, PartialEq)]
+enum HotkeyAction {
+    Toggle,
+    Ghost,
+    Replay,
+    Show,
+}
+
+const ACTIONS: [HotkeyAction; 4] = [HotkeyAction::Toggle, HotkeyAction::Ghost, HotkeyAction::Replay, HotkeyAction::Show];
+
+/// Pide a la mesa una animación: "replay" (desde cero, con los datos reales)
+/// o "show" (el modo caótico). Si estaba oculta, aparece.
+fn play(app: &AppHandle, kind: &str) {
+    if let Some(w) = app.get_webview_window(MAIN)
+        && !w.is_visible().unwrap_or(false)
+    {
+        toggle_visible(app);
+    }
+    let _ = app.emit_to(MAIN, "play", kind);
 }
 
 /// El idioma con el que escribir ahora (el de los ajustes guardados).
@@ -211,6 +236,13 @@ fn relabel_menu(app: &AppHandle, cfg: &Settings) {
     for (item, text) in state.other_items.lock().unwrap().iter().zip(texts) {
         let _ = item.set_text(text);
     }
+    let plays = [
+        hotkey_label(lang.pick("Repetir animación", "Replay animation"), &cfg.hotkey_replay),
+        hotkey_label(lang.pick("Modo caótico", "Chaos mode"), &cfg.hotkey_show),
+    ];
+    for (item, text) in state.play_items.lock().unwrap().iter().zip(plays) {
+        let _ = item.set_text(text);
+    }
 }
 
 /// Registra los atajos nuevos.
@@ -222,13 +254,15 @@ fn relabel_menu(app: &AppHandle, cfg: &Settings) {
 fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), String> {
     let state = app.state::<AppState>();
     let lang = i18n::resolve(&new.language);
-    let toggle = settings::parse_hotkey(&new.hotkey_toggle).map_err(|e| e.message(lang))?;
-    let ghost = settings::parse_hotkey(&new.hotkey_ghost).map_err(|e| e.message(lang))?;
+    let mut parsed = Vec::new();
+    for (text, action) in new.hotkeys().into_iter().zip(ACTIONS) {
+        parsed.push((settings::parse_hotkey(text).map_err(|e| e.message(lang))?, action, text));
+    }
     let and = lang.pick(" y ", " and ");
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let mut taken = Vec::new();
-    for (key, text) in [(toggle, &new.hotkey_toggle), (ghost, &new.hotkey_ghost)] {
+    for &(key, _, text) in &parsed {
         if gs.register(key).is_err() {
             taken.push(text.as_str());
             if strict {
@@ -238,9 +272,8 @@ fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), St
     }
     if strict && !taken.is_empty() {
         let _ = gs.unregister_all();
-        if let Some((t, g)) = *state.keys.lock().unwrap() {
-            let _ = gs.register(t);
-            let _ = gs.register(g);
+        for (key, _) in state.keys.lock().unwrap().iter() {
+            let _ = gs.register(*key);
         }
         let keys = taken.join(and);
         return Err(match lang {
@@ -248,7 +281,7 @@ fn apply_hotkeys(app: &AppHandle, new: &Settings, strict: bool) -> Result<(), St
             Lang::En => format!("Another app is already using {keys}."),
         });
     }
-    *state.keys.lock().unwrap() = Some((toggle, ghost));
+    *state.keys.lock().unwrap() = parsed.iter().map(|&(key, action, _)| (key, action)).collect();
     relabel_menu(app, new);
     if taken.is_empty() {
         Ok(())
@@ -292,7 +325,7 @@ fn apply_settings(app: &AppHandle, old: Option<&Settings>, new: &Settings) -> Re
         }
     };
 
-    if old.is_none_or(|o| o.hotkey_toggle != new.hotkey_toggle || o.hotkey_ghost != new.hotkey_ghost) {
+    if old.is_none_or(|o| o.hotkeys() != new.hotkeys()) {
         step(apply_hotkeys(app, new, !startup))?;
     }
     if old.is_none_or(|o| o.autostart != new.autostart) {
@@ -451,11 +484,13 @@ pub fn run() {
                     if *state.hotkeys_paused.lock().unwrap() {
                         return;
                     }
-                    let Some((toggle, ghost)) = *state.keys.lock().unwrap() else { return };
-                    if shortcut == &toggle {
-                        toggle_visible(app);
-                    } else if shortcut == &ghost {
-                        toggle_ghost(app);
+                    let action = state.keys.lock().unwrap().iter().find(|(k, _)| k == shortcut).map(|&(_, a)| a);
+                    match action {
+                        Some(HotkeyAction::Toggle) => toggle_visible(app),
+                        Some(HotkeyAction::Ghost) => toggle_ghost(app),
+                        Some(HotkeyAction::Replay) => play(app, "replay"),
+                        Some(HotkeyAction::Show) => play(app, "show"),
+                        None => {}
                     }
                 })
                 .build(),
@@ -464,12 +499,13 @@ pub fn run() {
             snap: Mutex::new(Snapshot::default()),
             settings: Mutex::new(Settings::default()),
             settings_path: Mutex::new(PathBuf::new()),
-            keys: Mutex::new(None),
+            keys: Mutex::new(Vec::new()),
             hotkeys_paused: Mutex::new(false),
             refresh: Mutex::new(None),
             toggle_item: Mutex::new(None),
             ghost_item: Mutex::new(None),
             other_items: Mutex::new(Vec::new()),
+            play_items: Mutex::new(Vec::new()),
         })
         .on_window_event(|window, event| {
             if window.label() != SETTINGS {
@@ -503,9 +539,15 @@ pub fn run() {
             let ghost = CheckMenuItemBuilder::with_id("ghost", "Claupier").build(app)?;
             let settings_item = MenuItemBuilder::with_id("settings", "Claupier").build(app)?;
             let refresh = MenuItemBuilder::with_id("refresh", "Claupier").build(app)?;
+            let replay = MenuItemBuilder::with_id("replay", "Claupier").build(app)?;
+            let chaos = MenuItemBuilder::with_id("show", "Claupier").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Claupier").build(app)?;
             let menu = MenuBuilder::new(app)
-                .items(&[&show, &ghost, &settings_item, &refresh])
+                .items(&[&show, &ghost])
+                .separator()
+                .items(&[&replay, &chaos])
+                .separator()
+                .items(&[&settings_item, &refresh])
                 .separator()
                 .item(&quit_item)
                 .build()?;
@@ -514,6 +556,7 @@ pub fn run() {
                 *state.toggle_item.lock().unwrap() = Some(show);
                 *state.ghost_item.lock().unwrap() = Some(ghost);
                 *state.other_items.lock().unwrap() = vec![settings_item, refresh, quit_item];
+                *state.play_items.lock().unwrap() = vec![replay, chaos];
             }
             relabel_menu(app.handle(), &cfg);
 
@@ -526,6 +569,8 @@ pub fn run() {
                     "ghost" => toggle_ghost(app),
                     "settings" => open_settings(app.clone()),
                     "refresh" => refresh_now(app.state::<AppState>()),
+                    "replay" => play(app, "replay"),
+                    "show" => play(app, "show"),
                     "quit" => quit(app),
                     _ => {}
                 })

@@ -3,6 +3,7 @@
 import { createBridge, inTauri } from "./core/bridge";
 import { setTextStyle } from "./core/font";
 import { L, resolveLang, setLang } from "./core/i18n";
+import { EMPTY_MS, type PlayKind, SHOW_STEP_MS, chaosSteps, emptySnapshot } from "./core/showcase";
 import { SoundEngine } from "./core/sound";
 import type { Settings, Snapshot } from "./core/types";
 import { DesignView, effectiveMotion } from "./core/view";
@@ -46,11 +47,51 @@ async function start() {
     sound.configure(settings.sound, snap.quiet);
   };
 
+  // Mientras dura una animación a pedido, los datos nuevos se guardan y se
+  // muestran al terminar. Un número nuevo cancela la animación en curso.
+  let playing = 0;
+  let busyPlaying = false;
+
+  const playContext = (): DesignContext => ({
+    ...context(),
+    // Se pidió a propósito: se anima aunque la animación esté apagada, salvo
+    // que Windows pida reducir el movimiento.
+    motion: motionQuery.matches ? "reduced" : "full",
+  });
+
+  const play = async (kind: PlayKind) => {
+    if (!view) return;
+    const token = ++playing;
+    busyPlaying = true;
+    const wait = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+    const alive = () => token === playing;
+    // Desde cero: un diseño nuevo, vacío.
+    view.setDesign(createDesign(settings.design));
+    view.feed(emptySnapshot(snap, settings.bankShows), playContext(), true);
+    await wait(EMPTY_MS);
+    if (kind === "show") {
+      for (const step of chaosSteps(snap)) {
+        if (!alive()) return;
+        view.feed(step, playContext(), false);
+        await wait(SHOW_STEP_MS);
+      }
+    }
+    if (!alive()) return;
+    // Al final, los datos reales (con su animación de vuelta).
+    view.feed(snap, playContext(), false);
+    busyPlaying = false;
+  };
+
+  const stopPlaying = () => {
+    playing++;
+    busyPlaying = false;
+  };
+
   // Primero escuchar y después pedir el estado: así no se pierde un cambio
   // que llegue entre las dos cosas.
   await bridge.onSnapshot((next) => {
     snap = next;
-    if (!view) return;
+    if (!view || busyPlaying) return;
     sound.configure(settings.sound, snap.quiet);
     view.feed(snap, context(), false);
   });
@@ -61,6 +102,7 @@ async function start() {
     applyLanguage();
     if (!view) return;
     applyLook();
+    if (busyPlaying) stopPlaying();
     if (next.design !== prev.design) {
       view.setDesign(createDesign(next.design));
       await fit();
@@ -84,6 +126,7 @@ async function start() {
   await fit();
   view.feed(snap, context(), true);
 
+  await bridge.onPlay((kind) => void play(kind));
   bridge.onScaleChanged(() => void fit());
   motionQuery.addEventListener("change", () => view?.feed(snap, context(), true));
 

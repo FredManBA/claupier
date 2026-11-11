@@ -80,6 +80,10 @@ pub struct Settings {
     pub start_ghost: bool,
     pub hotkey_toggle: String,
     pub hotkey_ghost: String,
+    /// Repite la animación del diseño desde cero, con los datos reales.
+    pub hotkey_replay: String,
+    /// Modo caótico: llena todo con datos falsos para lucir cada animación y color.
+    pub hotkey_show: String,
     pub alerts: Alerts,
     /// "left": la banca muestra lo que queda; "used": lo usado.
     pub bank_shows: String,
@@ -114,6 +118,8 @@ impl Default for Settings {
             start_ghost: false,
             hotkey_toggle: "Ctrl+Alt+F".into(),
             hotkey_ghost: "Ctrl+Alt+G".into(),
+            hotkey_replay: "Ctrl+Alt+R".into(),
+            hotkey_show: "Ctrl+Alt+C".into(),
             alerts: Alerts::default(),
             bank_shows: "left".into(),
             period: "today".into(),
@@ -168,11 +174,19 @@ impl Settings {
         }
         let s = &mut self.sound;
         s.volume = if s.volume.is_finite() { s.volume.clamp(0.0, 1.0) } else { 0.5 };
-        if parse_hotkey(&self.hotkey_toggle).is_err() {
-            self.hotkey_toggle = d.hotkey_toggle;
-        }
-        if parse_hotkey(&self.hotkey_ghost).is_err() || same_hotkey(&self.hotkey_ghost, &self.hotkey_toggle) {
-            self.hotkey_ghost = d.hotkey_ghost;
+        // Cada atajo debe entenderse y no repetir uno anterior; si no, vuelve al
+        // de fábrica (o a ese con Shift, si el de fábrica ya está en uso).
+        let defaults = [d.hotkey_toggle, d.hotkey_ghost, d.hotkey_replay, d.hotkey_show];
+        let mut taken: Vec<String> = Vec::new();
+        for (i, slot) in self.hotkeys_mut().into_iter().enumerate() {
+            let fallback = defaults[i].clone();
+            let shifted = fallback.replace("Ctrl+Alt+", "Ctrl+Alt+Shift+");
+            let pick = [slot.clone(), fallback, shifted]
+                .into_iter()
+                .find(|h| parse_hotkey(h).is_ok() && !taken.iter().any(|t| same_hotkey(t, h)))
+                .unwrap_or_default();
+            *slot = pick.clone();
+            taken.push(pick);
         }
     }
 
@@ -204,13 +218,27 @@ impl Settings {
         let mut next: Settings = serde_json::from_value(base)
             .map_err(|e| format!("{}: {e}", lang.pick("Ajuste inválido", "Invalid setting")))?;
         // Los atajos se validan aparte para poder explicar el error.
-        parse_hotkey(&next.hotkey_toggle).map_err(|e| e.message(lang))?;
-        parse_hotkey(&next.hotkey_ghost).map_err(|e| e.message(lang))?;
-        if same_hotkey(&next.hotkey_toggle, &next.hotkey_ghost) {
-            return Err(lang.pick("Los dos atajos no pueden ser iguales.", "The two shortcuts can't be the same.").into());
+        let keys = next.hotkeys();
+        for key in keys {
+            parse_hotkey(key).map_err(|e| e.message(lang))?;
+        }
+        let repeated = (0..keys.len()).any(|i| (i + 1..keys.len()).any(|j| same_hotkey(keys[i], keys[j])));
+        if repeated {
+            return Err(lang.pick("Dos atajos no pueden ser iguales.", "Two shortcuts can't be the same.").into());
         }
         next.sanitize();
         Ok(next)
+    }
+}
+
+impl Settings {
+    /// Los cuatro atajos, en el orden de `HotkeyAction`.
+    pub fn hotkeys(&self) -> [&String; 4] {
+        [&self.hotkey_toggle, &self.hotkey_ghost, &self.hotkey_replay, &self.hotkey_show]
+    }
+
+    fn hotkeys_mut(&mut self) -> [&mut String; 4] {
+        [&mut self.hotkey_toggle, &mut self.hotkey_ghost, &mut self.hotkey_replay, &mut self.hotkey_show]
     }
 }
 
@@ -342,5 +370,9 @@ mod tests {
         let mut s = Settings { hotkey_ghost: "Alt+Ctrl+F".into(), ..Default::default() };
         s.sanitize();
         assert_eq!(s.hotkey_ghost, "Ctrl+Alt+G");
+        // Si el de fábrica ya lo usa otro atajo, se prueba con Shift.
+        let mut t = Settings { hotkey_toggle: "Ctrl+Alt+R".into(), hotkey_replay: "nada".into(), ..Default::default() };
+        t.sanitize();
+        assert_eq!(t.hotkey_replay, "Ctrl+Alt+Shift+R");
     }
 }

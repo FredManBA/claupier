@@ -1,6 +1,7 @@
 // Puente con el backend de Tauri. En el navegador (sin Tauri) simula datos y
 // guarda los ajustes en memoria, para poder ver y probar los diseños.
 
+import type { PlayKind } from "./showcase";
 import { DEFAULT_SETTINGS, type DeepPartial, type Settings, type Snapshot, type Totals } from "./types";
 
 export const inTauri = "__TAURI_INTERNALS__" in window;
@@ -24,6 +25,8 @@ export interface Bridge {
   onScaleChanged(cb: () => void): void;
   /** La ventana cambió de lugar (al arrastrarla o al anclarla). */
   onMoved(cb: () => void): void;
+  /** Un atajo o la bandeja pidieron una animación. */
+  onPlay(cb: Listener<PlayKind>): Promise<void>;
 }
 
 // ── Tauri ─────────────────────────────────────────────────────────────────
@@ -48,6 +51,7 @@ async function tauriBridge(): Promise<Bridge> {
     hideWindow: () => win.hide(),
     onScaleChanged: (cb) => void win.onScaleChanged(cb),
     onMoved: (cb) => void win.onMoved(cb),
+    onPlay: async (cb) => void (await listen<PlayKind>("play", (e) => cb(e.payload))),
   };
 }
 
@@ -159,6 +163,13 @@ function demoBridge(): Bridge {
     hideWindow: noop,
     onScaleChanged: () => {},
     onMoved: () => {},
+    // En el navegador, los mismos atajos de fábrica sobre la página.
+    onPlay: async (cb) =>
+      window.addEventListener("keydown", (e) => {
+        if (!e.ctrlKey || !e.altKey) return;
+        if (e.code === "KeyR") cb("replay");
+        if (e.code === "KeyC") cb("show");
+      }),
   };
 }
 
